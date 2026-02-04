@@ -4,10 +4,12 @@ import { Text, Card, Button, IconButton, ActivityIndicator } from 'react-native-
 import { useWalletStore } from '../store/walletStore'
 import { walletManager } from '../services/WalletManager'
 import { Transaction, SubWallet } from '../types'
-import { ArrowDownLeft, ArrowUpRight, Scan, History } from 'lucide-react-native'
 import ReceiveModal from '../components/ReceiveModal'
 import SendModal from '../components/SendModal'
 import QRScanner from '../components/QRScanner'
+import WalletInfoModal from '../components/WalletInfoModal'
+import { ArrowDownLeft, ArrowUpRight, Scan, History, Link } from 'lucide-react-native'
+import { SecurityService } from '../services/SecurityService'
 
 export default function SubWalletScreen() {
     const selectedWalletId = useWalletStore((state) => state.selectedWalletId)
@@ -22,6 +24,7 @@ export default function SubWalletScreen() {
     const [sendVisible, setSendVisible] = useState(false)
     const [scannerVisible, setScannerVisible] = useState(false)
     const [scannedInvoice, setScannedInvoice] = useState('')
+    const [infoVisible, setInfoVisible] = useState(false)
 
     const wallet = subWallets.find(w => w.id === selectedWalletId)
 
@@ -47,8 +50,8 @@ export default function SubWalletScreen() {
             try {
                 const txs = await walletManager.listTransactions(20)
                 // Transform NWC transactions to our Transaction type
-                const subWalletTxs: Transaction[] = txs.map((t: any) => ({
-                    id: t.id,
+                const subWalletTxs: Transaction[] = txs.map((t: any, index: number) => ({
+                    id: t.id || `tx-${Date.now()}-${index}`,
                     type: t.type === 'incoming' ? 'incoming' : 'outgoing',
                     amountMsat: t.amount,
                     description: t.description || (t.type === 'incoming' ? 'Received' : 'Sent'),
@@ -89,11 +92,20 @@ export default function SubWalletScreen() {
                     onPress={() => setSelectedWalletId(null)}
                 />
                 <Text variant="titleLarge" style={styles.headerTitle}>{wallet.name}</Text>
-                <IconButton
-                    icon="refresh"
-                    iconColor="#FFD700"
-                    onPress={refreshWalletData}
-                />
+                <View style={styles.headerRight}>
+                    <IconButton
+                        icon={() => <Link size={20} color="#FFD700" />}
+                        onPress={async () => {
+                            const ok = await SecurityService.authenticate('Authorize to view connection details');
+                            if (ok) setInfoVisible(true);
+                        }}
+                    />
+                    <IconButton
+                        icon="refresh"
+                        iconColor="#FFD700"
+                        onPress={refreshWalletData}
+                    />
+                </View>
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -103,20 +115,22 @@ export default function SubWalletScreen() {
                         <Text style={styles.balanceLabel}>
                             {wallet.budgetMsat !== undefined ? 'Remaining Budget' : 'Sub-Wallet Balance'}
                         </Text>
-                        {loading ? (
-                            <ActivityIndicator color="#FFD700" style={{ marginVertical: 10 }} />
-                        ) : (
-                            <>
-                                <Text style={styles.balanceText}>
-                                    {balance !== null ? (balance / 1000).toLocaleString() : '---'} <Text style={styles.satsLabel}>sats</Text>
-                                </Text>
-                                {wallet.budgetMsat !== undefined && (
-                                    <Text style={styles.budgetUsedText}>
-                                        {(wallet.spentMsat / 1000).toLocaleString()} / {(wallet.budgetMsat / 1000).toLocaleString()} sats spent
+                        <View>
+                            {loading ? (
+                                <ActivityIndicator color="#FFD700" style={{ marginVertical: 10 }} />
+                            ) : (
+                                <>
+                                    <Text style={styles.balanceText}>
+                                        {balance !== null ? (balance / 1000).toLocaleString() : '---'} <Text style={styles.satsLabel}>sats</Text>
                                     </Text>
-                                )}
-                            </>
-                        )}
+                                    {wallet.budgetMsat !== undefined && (
+                                        <Text style={styles.budgetUsedText}>
+                                            {(wallet.spentMsat / 1000).toLocaleString()} / {(wallet.budgetMsat / 1000).toLocaleString()} sats spent
+                                        </Text>
+                                    )}
+                                </>
+                            )}
+                        </View>
                     </Card.Content>
                 </Card>
 
@@ -142,9 +156,12 @@ export default function SubWalletScreen() {
                         <IconButton
                             icon={() => <ArrowUpRight size={24} color="#000" />}
                             style={styles.actionButton}
-                            onPress={() => {
-                                setScannedInvoice('')
-                                setSendVisible(true)
+                            onPress={async () => {
+                                const ok = await SecurityService.authenticate('Authorize payment');
+                                if (ok) {
+                                    setScannedInvoice('');
+                                    setSendVisible(true);
+                                }
                             }}
                         />
                         <Text style={styles.actionLabel}>Send</Text>
@@ -157,38 +174,40 @@ export default function SubWalletScreen() {
                     <Text style={styles.historyTitle}>Transaction History</Text>
                 </View>
 
-                {transactions.length > 0 ? (
-                    transactions.map((tx) => (
-                        <Card key={tx.id} style={styles.txCard}>
-                            <Card.Content style={styles.txContent}>
-                                <View style={styles.txIconContainer}>
-                                    {tx.type === 'incoming' ? (
-                                        <ArrowDownLeft size={20} color="#4CAF50" />
-                                    ) : (
-                                        <ArrowUpRight size={20} color="#F44336" />
-                                    )}
-                                </View>
-                                <View style={styles.txInfo}>
-                                    <Text style={styles.txDescription}>{tx.description}</Text>
-                                    <Text style={styles.txDate}>
-                                        {new Date(tx.timestamp).toLocaleDateString()}
-                                    </Text>
-                                </View>
-                                <View style={styles.txAmountContainer}>
-                                    <Text style={[
-                                        styles.txAmount,
-                                        { color: tx.type === 'incoming' ? '#4CAF50' : '#F44336' }
-                                    ]}>
-                                        {tx.type === 'incoming' ? '+' : '-'}{(tx.amountMsat / 1000).toLocaleString()}
-                                    </Text>
-                                    <Text style={styles.txSats}>sats</Text>
-                                </View>
-                            </Card.Content>
-                        </Card>
-                    ))
-                ) : (
-                    <Text style={styles.emptyText}>No transactions yet</Text>
-                )}
+                <View>
+                    {transactions.length > 0 ? (
+                        transactions.map((tx, index) => (
+                            <Card key={`${tx.id}-${index}`} style={styles.txCard}>
+                                <Card.Content style={styles.txContent}>
+                                    <View style={styles.txIconContainer}>
+                                        {tx.type === 'incoming' ? (
+                                            <ArrowDownLeft size={20} color="#4CAF50" />
+                                        ) : (
+                                            <ArrowUpRight size={20} color="#F44336" />
+                                        )}
+                                    </View>
+                                    <View style={styles.txInfo}>
+                                        <Text style={styles.txDescription}>{tx.description}</Text>
+                                        <Text style={styles.txDate}>
+                                            {new Date(tx.timestamp).toLocaleDateString()}
+                                        </Text>
+                                    </View>
+                                    <View style={styles.txAmountContainer}>
+                                        <Text style={[
+                                            styles.txAmount,
+                                            { color: tx.type === 'incoming' ? '#4CAF50' : '#F44336' }
+                                        ]}>
+                                            {tx.type === 'incoming' ? '+' : '-'}{(tx.amountMsat / 1000).toLocaleString()}
+                                        </Text>
+                                        <Text style={styles.txSats}>sats</Text>
+                                    </View>
+                                </Card.Content>
+                            </Card>
+                        ))
+                    ) : (
+                        <Text style={styles.emptyText}>No transactions yet</Text>
+                    )}
+                </View>
             </ScrollView>
 
             <ReceiveModal
@@ -201,6 +220,12 @@ export default function SubWalletScreen() {
                 onDismiss={() => setSendVisible(false)}
                 initialInvoice={scannedInvoice}
                 onPaymentSuccess={refreshWalletData}
+            />
+            <WalletInfoModal
+                visible={infoVisible}
+                onDismiss={() => setInfoVisible(false)}
+                walletName={wallet.name}
+                nwcUri={wallet.nwcUri}
             />
         </View>
     )
@@ -222,6 +247,12 @@ const styles = StyleSheet.create({
     headerTitle: {
         color: '#FFD700',
         fontWeight: 'bold',
+        flex: 1,
+        marginLeft: 10,
+    },
+    headerRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     scrollContent: {
         padding: 20,

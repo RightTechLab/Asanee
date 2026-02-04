@@ -19,6 +19,7 @@ export default function Dashboard() {
 
     const [loading, setLoading] = useState(false)
     const [walletBalances, setWalletBalances] = useState<Record<string, number | null>>({})
+    const [expandedWallets, setExpandedWallets] = useState<Record<string, boolean>>({})
 
     useEffect(() => {
         refreshTotalBalance()
@@ -146,73 +147,94 @@ export default function Dashboard() {
                     />
                 </View>
                 {/* Active Wallets */}
-                {activeWallets.length > 0 ? (
-                    activeWallets.map((wallet) => (
-                        <Card
-                            key={wallet.id}
-                            style={styles.walletCard}
-                            onPress={() => useWalletStore.getState().setSelectedWalletId(wallet.id)}
-                        >
-                            <Card.Title
-                                title={wallet.name}
-                                titleStyle={styles.walletTitle}
-                                subtitle={`${wallet.permissions.length} permission${wallet.permissions.length !== 1 ? 's' : ''}`}
-                                subtitleStyle={styles.walletSubtitle}
-                                right={() => (
-                                    <View style={styles.walletRight}>
-                                        <Text style={styles.walletBalanceText}>
-                                            {walletBalances[wallet.id] !== undefined && walletBalances[wallet.id] !== null
-                                                ? (walletBalances[wallet.id]! / 1000).toLocaleString()
-                                                : '---'} sats
-                                        </Text>
-                                        <Menu
-                                            visible={menuVisible === wallet.id}
-                                            onDismiss={() => setMenuVisible(null)}
-                                            anchor={
-                                                <IconButton
-                                                    icon="dots-vertical"
-                                                    iconColor="#FFD700"
-                                                    onPress={() => setMenuVisible(wallet.id)}
-                                                />
-                                            }
-                                        >
-                                            <Menu.Item
-                                                onPress={() => handleRevokeWallet(wallet)}
-                                                title="Revoke"
-                                                leadingIcon="cancel"
+                <View>
+                    {activeWallets.length > 0 ? (
+                        activeWallets.map((wallet) => (
+                            <Card
+                                key={wallet.id}
+                                style={styles.walletCard}
+                                onPress={() => useWalletStore.getState().setSelectedWalletId(wallet.id)}
+                            >
+                                <Card.Title
+                                    title={wallet.name}
+                                    titleStyle={styles.walletTitle}
+                                    subtitle={`${wallet.permissions.length} permission${wallet.permissions.length !== 1 ? 's' : ''}`}
+                                    subtitleStyle={styles.walletSubtitle}
+                                    right={() => (
+                                        <View style={styles.walletRight}>
+                                            <Text style={styles.walletBalanceText}>
+                                                {walletBalances[wallet.id] !== undefined && walletBalances[wallet.id] !== null
+                                                    ? (walletBalances[wallet.id]! / 1000).toLocaleString()
+                                                    : '---'} sats
+                                            </Text>
+                                            <IconButton
+                                                icon={expandedWallets[wallet.id] ? "chevron-up" : "chevron-down"}
+                                                iconColor="#FFD700"
+                                                size={20}
+                                                onPress={(e) => {
+                                                    e.stopPropagation();
+                                                    setExpandedWallets(prev => ({
+                                                        ...prev,
+                                                        [wallet.id]: !prev[wallet.id]
+                                                    }));
+                                                }}
                                             />
-                                        </Menu>
-                                    </View>
-                                )}
-                            />
-                            <Card.Content>
-                                <View style={styles.permissionContainer}>
-                                    {wallet.permissions.map((perm, idx) => (
-                                        <View key={idx} style={styles.permissionChip}>
-                                            <Text style={styles.permissionText}>{perm}</Text>
+                                            <Menu
+                                                visible={menuVisible === wallet.id}
+                                                onDismiss={() => setMenuVisible(null)}
+                                                anchor={
+                                                    <IconButton
+                                                        icon="dots-vertical"
+                                                        iconColor="#FFD700"
+                                                        onPress={() => setMenuVisible(wallet.id)}
+                                                    />
+                                                }
+                                            >
+                                                <Menu.Item
+                                                    onPress={() => handleRevokeWallet(wallet)}
+                                                    title="Revoke"
+                                                    leadingIcon="cancel"
+                                                />
+                                            </Menu>
                                         </View>
-                                    ))}
-                                </View>
-                                {wallet.budgetMsat && (
-                                    <Text style={styles.budgetText}>
-                                        Budget: {(wallet.budgetMsat / 1000).toLocaleString()} sats
-                                    </Text>
+                                    )}
+                                />
+                                {expandedWallets[wallet.id] && (
+                                    <Card.Content>
+                                        <View style={styles.permissionContainer}>
+                                            {wallet.permissions.map((perm, idx) => (
+                                                <View key={`${wallet.id}-perm-${idx}`} style={styles.permissionChip}>
+                                                    <Text style={styles.permissionText}>{perm}</Text>
+                                                </View>
+                                            ))}
+                                        </View>
+                                        {wallet.budgetMsat && (
+                                            <View style={styles.budgetRow}>
+                                                <Text style={styles.budgetText}>
+                                                    Budget: {(wallet.budgetMsat / 1000).toLocaleString()} sats
+                                                </Text>
+                                                <Text style={styles.spentText}>
+                                                    Spent: {(wallet.spentMsat / 1000).toLocaleString()} sats
+                                                </Text>
+                                            </View>
+                                        )}
+                                    </Card.Content>
                                 )}
+                            </Card>
+                        ))
+                    ) : (
+                        <Card style={styles.emptyCard}>
+                            <Card.Content>
+                                <Text variant="titleMedium" style={styles.emptyTitle}>
+                                    No Sub-Wallets Yet
+                                </Text>
+                                <Text variant="bodyMedium" style={styles.emptyText}>
+                                    Create your first scoped sub-wallet to get started
+                                </Text>
                             </Card.Content>
                         </Card>
-                    ))
-                ) : (
-                    <Card style={styles.emptyCard}>
-                        <Card.Content>
-                            <Text variant="titleMedium" style={styles.emptyTitle}>
-                                No Sub-Wallets Yet
-                            </Text>
-                            <Text variant="bodyMedium" style={styles.emptyText}>
-                                Create your first scoped sub-wallet to get started
-                            </Text>
-                        </Card.Content>
-                    </Card>
-                )}
+                    )}
+                </View>
 
                 {/* Revoked Wallets */}
                 {revokedWallets.length > 0 && (
@@ -343,9 +365,21 @@ const styles = StyleSheet.create({
         fontSize: 12,
     },
     budgetText: {
-        color: '#E0E0E0',
-        marginTop: 12,
-        fontSize: 14,
+        color: '#888',
+        fontSize: 12,
+    },
+    spentText: {
+        color: '#F44336',
+        fontSize: 12,
+        fontWeight: 'bold',
+    },
+    budgetRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: 8,
+        paddingTop: 8,
+        borderTopWidth: 1,
+        borderTopColor: '#222',
     },
     emptyCard: {
         backgroundColor: '#141414',

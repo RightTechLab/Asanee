@@ -40,7 +40,7 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
     }
 
     return (
-        <View style={styles.container}>
+        <View style={styles.fullScreenContainer}>
             <CameraView
                 style={styles.camera}
                 onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
@@ -70,6 +70,11 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         justifyContent: 'center',
+        backgroundColor: '#000',
+    },
+    fullScreenContainer: {
+        ...StyleSheet.absoluteFillObject,
+        zIndex: 1000,
         backgroundColor: '#000',
     },
     message: {

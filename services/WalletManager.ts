@@ -16,21 +16,15 @@ export class WalletManager {
      * Connect to Master NWC
      */
     async connect(masterUri: string): Promise<void> {
-        console.log('🔌 Starting NWC connection...');
-        console.log('📝 Master URI length:', masterUri.length);
 
         try {
-            console.log('🏗️  Creating NWC client...');
             // Create NWC client using @getalby/sdk
             this.nwcClient = new NWCClient({
                 nostrWalletConnectUrl: masterUri,
             })
-            console.log('✅ NWC client created successfully');
 
-            console.log('🔍 Testing connection with get_info...');
             // Test connection by calling get_info
             const info = await this.nwcClient.getInfo()
-            console.log('📊 Wallet info received:', JSON.stringify(info, null, 2));
 
             if (!info) {
                 throw new Error('Failed to connect to wallet')
@@ -38,18 +32,13 @@ export class WalletManager {
 
             this.masterNWCUri = masterUri
             this.activePubkey = this.extractPubkey(masterUri)
-            console.log('🔑 Active Pubkey:', this.activePubkey);
 
-            console.log('💾 Saving master URI to secure storage...');
 
             // Save to secure storage
             await StorageService.save('master_nwc_uri', masterUri)
-            console.log('✅ Master URI saved');
 
-            console.log('📂 Loading existing sub-wallets for this account...');
             // Load existing sub-wallets
             await this.loadSubWallets()
-            console.log(`✅ Connection complete! Loaded ${this.subWallets.size} sub-wallets for account ${this.activePubkey}`);
         } catch (error) {
             console.error('❌ Connection failed:', error);
             console.error('Error details:', error instanceof Error ? error.message : error);
@@ -62,24 +51,19 @@ export class WalletManager {
      * Disconnect Master NWC
      */
     async disconnect(): Promise<void> {
-        console.log('🔌 Disconnecting wallet...');
 
         if (this.nwcClient) {
-            console.log('🔒 Closing NWC client...');
             // Close NWC connection if possible
             this.nwcClient = null
         }
 
         this.masterNWCUri = null
         this.activePubkey = null
-        console.log(`🗑️  Clearing ${this.subWallets.size} sub-wallets from memory...`);
         this.subWallets.clear()
 
-        console.log('💾 Removing current session data...');
         await StorageService.delete('master_nwc_uri')
         // We DON'T delete sub_wallets because they are now account-specific 
         // and should stay for when the user reconnects.
-        console.log('✅ Wallet disconnected successfully');
     }
 
     /**
@@ -100,8 +84,6 @@ export class WalletManager {
      * but tracks permissions locally for UI purposes.
      */
     async createSubWallet(config: WalletConfig): Promise<SubWallet> {
-        console.log('🆕 Creating sub-wallet:', config.name);
-        console.log('📋 Config:', JSON.stringify(config, null, 2));
 
         if (!this.masterNWCUri) {
             console.error('❌ Master NWC not connected');
@@ -110,7 +92,6 @@ export class WalletManager {
 
         // Generate unique ID
         const id = `sub_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-        console.log('🔑 Generated wallet ID:', id);
 
         // Create sub-wallet
         // TODO: When wallet providers support 'create_connection', implement actual scoped URI creation
@@ -125,12 +106,9 @@ export class WalletManager {
             createdAt: Date.now(),
             status: 'active'
         }
-        console.log('💼 Sub-wallet created:', JSON.stringify(subWallet, null, 2));
 
         this.subWallets.set(id, subWallet)
-        console.log(`💾 Saving sub-wallets (total: ${this.subWallets.size})...`);
         await this.saveSubWallets()
-        console.log('✅ Sub-wallet creation complete');
 
         return subWallet
     }
@@ -139,7 +117,6 @@ export class WalletManager {
      * Revoke a sub-wallet
      */
     async revokeSubWallet(id: string): Promise<void> {
-        console.log('🚫 Revoking sub-wallet:', id);
 
         const wallet = this.subWallets.get(id)
         if (!wallet) {
@@ -147,13 +124,10 @@ export class WalletManager {
             throw new Error('Sub-wallet not found')
         }
 
-        console.log('📝 Revoking wallet:', wallet.name);
         // TODO: In production, send 'revoke_connection' request to wallet provider
         wallet.status = 'revoked'
 
-        console.log('💾 Saving updated wallet list...');
         await this.saveSubWallets()
-        console.log('✅ Sub-wallet revoked successfully');
     }
 
     /**
@@ -185,7 +159,6 @@ export class WalletManager {
      * Create a Lightning invoice
      */
     async makeInvoice(amountMsat: number, description?: string): Promise<any> {
-        console.log(`⚡ Generating invoice: ${amountMsat} msat, desc: ${description || 'N/A'}`);
         if (!this.nwcClient) {
             throw new Error('Not connected')
         }
@@ -194,7 +167,6 @@ export class WalletManager {
                 amount: amountMsat,
                 description: description,
             })
-            console.log('✅ Invoice generated:', invoice.invoice);
             return invoice
         } catch (error) {
             console.error('❌ Error generating invoice:', error);
@@ -206,7 +178,6 @@ export class WalletManager {
      * Pay a Lightning invoice
      */
     async payInvoice(invoice: string, amountMsat?: number, walletId?: string): Promise<any> {
-        console.log('💸 Paying invoice:', invoice.substring(0, 30) + '...');
         if (!this.nwcClient) {
             throw new Error('Not connected')
         }
@@ -214,7 +185,6 @@ export class WalletManager {
             const response = await this.nwcClient.payInvoice({
                 invoice: invoice,
             })
-            console.log('✅ Payment successful:', response.preimage);
 
             // If we have an amount and walletId, record the spend
             if (amountMsat && walletId) {
@@ -232,7 +202,6 @@ export class WalletManager {
      * List recent transactions
      */
     async listTransactions(limit = 10): Promise<any[]> {
-        console.log('📚 Fetching transaction history...', { limit });
         if (!this.nwcClient) {
             throw new Error('Not connected')
         }
@@ -250,21 +219,63 @@ export class WalletManager {
                     transactions = response.transactions
                 }
 
-                console.log(`✅ Fetched ${transactions.length} transactions via SDK`);
                 return transactions
             } catch (err) {
-                console.log('⚠️  SDK listTransactions failed, trying raw call...');
                 // Fallback to raw call if SDK method fails or is missing
                 const response = await this.nwcClient.call('list_transactions', {
                     limit,
                 })
                 const txs = response?.transactions || [];
-                console.log(`✅ Fetched ${txs.length} transactions via raw call`);
                 return txs
             }
         } catch (error) {
             console.error('❌ Failed to fetch transactions:', error);
             return [] // Return empty array on error to prevent crashes
+        }
+    }
+
+    /**
+     * Resolve a Lightning Address (user@domain.com) to LNURL-pay metadata
+     */
+    async resolveLightningAddress(address: string): Promise<any> {
+        try {
+            const [user, domain] = address.split('@')
+            if (!user || !domain) throw new Error('Invalid Lightning Address')
+
+            const url = `https://${domain}/.well-known/lnurlp/${user}`
+            const response = await fetch(url)
+            const data = await response.json()
+
+            if (data.status === 'ERROR') {
+                throw new Error(data.reason || 'Failed to resolve LN Address')
+            }
+
+            return data
+        } catch (error) {
+            console.error('Failed to resolve LN Address:', error)
+            throw error
+        }
+    }
+
+    /**
+     * Get a BOLT11 invoice from an LNURL-pay callback
+     */
+    async getInvoiceFromLNURL(callback: string, amountMsat: number): Promise<string> {
+        try {
+            const url = new URL(callback)
+            url.searchParams.append('amount', amountMsat.toString())
+
+            const response = await fetch(url.toString())
+            const data = await response.json()
+
+            if (data.status === 'ERROR') {
+                throw new Error(data.reason || 'Failed to fetch invoice from LNURL')
+            }
+
+            return data.pr
+        } catch (error) {
+            console.error('Failed to get invoice from LNURL:', error)
+            throw error
         }
     }
 
@@ -332,14 +343,11 @@ export class WalletManager {
         if (!this.activePubkey) return
 
         const storageKey = `sub_wallets_${this.activePubkey}`
-        console.log(`📂 Loading sub-wallets from storage (key: ${storageKey})...`);
 
         const wallets = await StorageService.load<SubWallet[]>(storageKey)
         if (wallets) {
-            console.log(`📚 Found ${wallets.length} stored sub-wallets for this account`);
             this.subWallets = new Map(wallets.map(w => [w.id, w]))
         } else {
-            console.log('📭 No sub-wallets found for this account');
             this.subWallets.clear()
         }
     }
@@ -353,9 +361,7 @@ export class WalletManager {
         const storageKey = `sub_wallets_${this.activePubkey}`
         const wallets = Array.from(this.subWallets.values())
 
-        console.log(`💾 Saving ${wallets.length} sub-wallets to storage (key: ${storageKey})...`);
         await StorageService.save(storageKey, wallets)
-        console.log('✅ Sub-wallets saved successfully');
     }
 
     /**
