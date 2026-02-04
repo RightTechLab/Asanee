@@ -4,15 +4,32 @@
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web"
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "build:android": "eas build --platform android",
+    "build:ios": "eas build --platform ios"
   },
   "dependencies": {
+    "@getalby/sdk": "^7.0.0",
     "expo": "~54.0.33",
+    "expo-camera": "^17.0.10",
+    "expo-clipboard": "^8.0.8",
+    "expo-secure-store": "^15.0.8",
     "expo-status-bar": "~3.0.9",
+    "lucide-react-native": "^0.563.0",
+    "message-port-polyfill": "^0.2.0",
     "react": "19.1.0",
-    "react-native": "0.81.5"
+    "react-native": "0.81.5",
+    "react-native-gesture-handler": "~2.28.0",
+    "react-native-get-random-values": "~1.11.0",
+    "react-native-paper": "^5.15.0",
+    "react-native-qrcode-svg": "^6.3.21",
+    "react-native-reanimated": "~4.1.1",
+    "react-native-svg": "15.12.1",
+    "react-native-url-polyfill": "^3.0.0",
+    "text-encoding": "^0.7.0",
+    "zustand": "^5.0.11"
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
