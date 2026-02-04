@@ -27,6 +27,11 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
+      "icon": {
+        "dark": "./assets/logo.png",
+        "light": "./assets/logo.png",
+        "tinted": "./assets/logo.png",
+      },
       "supportsTablet": true,
       "bundleIdentifier": "com.krittakrub.asanee",
       "infoPlist": {
@@ -35,8 +40,9 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/logo.png",
+        "monochromeImage": "./assets/logo.png",
+        "backgroundColor": "#ffffff",
       },
       "newArchEnabled": true,
       "edgeToEdgeEnabled": true,
