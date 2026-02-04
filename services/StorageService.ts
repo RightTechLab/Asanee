@@ -13,7 +13,6 @@ export class StorageService {
             const value = typeof data === 'string' ? data : JSON.stringify(data)
             await SecureStore.setItemAsync(key, value)
         } catch (error) {
-            console.error(`Error saving to SecureStore [${key}]:`, error)
         }
     }
 
@@ -32,7 +31,6 @@ export class StorageService {
                 return data as unknown as T
             }
         } catch (error) {
-            console.error(`Error loading from SecureStore [${key}]:`, error)
             return null
         }
     }
@@ -44,7 +42,6 @@ export class StorageService {
         try {
             await SecureStore.deleteItemAsync(key)
         } catch (error) {
-            console.error(`Error deleting from SecureStore [${key}]:`, error)
         }
     }
 

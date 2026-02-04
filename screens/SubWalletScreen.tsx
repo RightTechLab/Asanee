@@ -47,7 +47,6 @@ export default function SubWalletScreen() {
                 const walletBalance = await walletManager.getWalletBalance(selectedWalletId)
                 setBalance(walletBalance)
             } catch (e) {
-                console.error('Failed to fetch balance:', e)
             }
 
             // Fetch transactions separately so failure doesn't block balance
@@ -66,7 +65,6 @@ export default function SubWalletScreen() {
                         status: 'completed'
                     }
                 })
-                console.log(`DEBUG: Fetched ${allTxs.length} transactions total. Sub-wallet IDs:`, wallet?.txIds);
 
                 // CRITICAL: Refresh wallet in store from manager FIRST to get latest txIds
                 const currentWallet = walletManager.getWallet(selectedWalletId)
@@ -82,11 +80,6 @@ export default function SubWalletScreen() {
                 const subWalletTxs = activeWallet?.txIds
                     ? allTxs.filter(tx => activeWallet.txIds?.includes(tx.id))
                     : allTxs
-
-                console.log(`DEBUG: [${activeWallet?.name}] IDs tracked:`, activeWallet?.txIds?.length, 'Found matching:', subWalletTxs.length);
-                if ((activeWallet?.txIds?.length || 0) > 0 && subWalletTxs.length === 0) {
-                    console.log(`DEBUG: All IDs were filtered out. First tracked ID: ${activeWallet?.txIds?.[0]}. First fetched ID: ${allTxs?.[0]?.id}`);
-                }
 
                 // Update wallet spent/received based on transactions
                 let totalSpent = 0
@@ -106,11 +99,9 @@ export default function SubWalletScreen() {
                 setActiveTransactions(subWalletTxs)
                 setBalance(await walletManager.getWalletBalance(selectedWalletId))
             } catch (e) {
-                console.error('Failed to fetch transactions:', e)
                 setActiveTransactions([]) // Clear or keep old ones?
             }
         } catch (error) {
-            console.error('Failed to refresh wallet data:', error)
         } finally {
             setLoading(false)
         }

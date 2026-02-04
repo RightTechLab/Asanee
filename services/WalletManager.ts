@@ -40,8 +40,6 @@ export class WalletManager {
             // Load existing sub-wallets
             await this.loadSubWallets()
         } catch (error) {
-            console.error('❌ Connection failed:', error);
-            console.error('Error details:', error instanceof Error ? error.message : error);
             this.nwcClient = null
             throw new Error(error instanceof Error ? error.message : 'Invalid NWC URI')
         }
@@ -86,7 +84,6 @@ export class WalletManager {
     async createSubWallet(config: WalletConfig): Promise<SubWallet> {
 
         if (!this.masterNWCUri) {
-            console.error('❌ Master NWC not connected');
             throw new Error('Master NWC not connected')
         }
 
@@ -122,7 +119,6 @@ export class WalletManager {
 
         const wallet = this.subWallets.get(id)
         if (!wallet) {
-            console.error('❌ Sub-wallet not found:', id);
             throw new Error('Sub-wallet not found')
         }
 
@@ -151,7 +147,6 @@ export class WalletManager {
      */
     async getInfo(): Promise<any> {
         if (!this.nwcClient) {
-            console.error('❌ Not connected - cannot get info');
             throw new Error('Not connected')
         }
         return await this.nwcClient.getInfo()
@@ -170,7 +165,6 @@ export class WalletManager {
                 description: description,
             })
 
-            console.log('DEBUG: makeInvoice response:', JSON.stringify(response))
 
             // If we have a walletId, we should record this invoice ID to track it when paid
             if (walletId) {
@@ -181,18 +175,15 @@ export class WalletManager {
                         if (!wallet.txIds) wallet.txIds = []
                         if (!wallet.txIds.includes(txId)) {
                             wallet.txIds.push(txId)
-                            console.log(`DEBUG: Associated prospective txId ${txId} with wallet ${wallet.name}`)
                             await this.saveSubWallets()
                         }
                     }
                 } else {
-                    console.warn('DEBUG: makeInvoice returned no payment_hash or id')
                 }
             }
 
             return response
         } catch (error) {
-            console.error('❌ Error generating invoice:', error);
             throw error
         }
     }
@@ -209,17 +200,14 @@ export class WalletManager {
                 invoice: invoice,
             })
 
-            console.log('DEBUG: payInvoice response:', JSON.stringify(response))
 
             // If we have an amount and walletId, record the spend
             if (walletId) {
                 // response.payment_hash or response.id is usually the unique identifier
                 const txId = response.payment_hash || response.id
                 if (txId) {
-                    console.log(`DEBUG: Payment successful. Recording txId ${txId} to wallet ${walletId}`)
                     await this.recordTransaction(walletId, amountMsat || 0, 'spent', txId)
                 } else {
-                    console.warn('DEBUG: payInvoice succeeded but returned no txId')
                     // Still record the balance change even if we don't have a unique txId
                     await this.recordTransaction(walletId, amountMsat || 0, 'spent')
                 }
@@ -227,7 +215,6 @@ export class WalletManager {
 
             return response
         } catch (error) {
-            console.error('❌ Payment failed:', error);
             throw error
         }
     }
@@ -263,7 +250,6 @@ export class WalletManager {
                 return txs
             }
         } catch (error) {
-            console.error('❌ Failed to fetch transactions:', error);
             return [] // Return empty array on error to prevent crashes
         }
     }
@@ -286,7 +272,6 @@ export class WalletManager {
 
             return data
         } catch (error) {
-            console.error('Failed to resolve LN Address:', error)
             throw error
         }
     }
@@ -308,7 +293,6 @@ export class WalletManager {
 
             return data.pr
         } catch (error) {
-            console.error('Failed to get invoice from LNURL:', error)
             throw error
         }
     }
@@ -339,7 +323,6 @@ export class WalletManager {
                 const info = await tempClient.getBalance()
                 return info.balance
             } catch (e) {
-                console.error(`Failed to fetch balance for wallet ${id}:`, e)
                 return null
             }
         }
@@ -363,7 +346,6 @@ export class WalletManager {
      * Record a transaction against a sub-wallet
      */
     async recordTransaction(walletId: string, amountMsat: number, type: 'spent' | 'received', txId?: string): Promise<void> {
-        console.log(`DEBUG: Recording transaction for ${walletId}. Type: ${type}, ID: ${txId}`)
         const wallet = this.subWallets.get(walletId)
         if (!wallet) return
 
@@ -377,7 +359,6 @@ export class WalletManager {
             if (!wallet.txIds) wallet.txIds = []
             if (!wallet.txIds.includes(txId)) {
                 wallet.txIds.push(txId)
-                console.log(`DEBUG: Added txId ${txId} to wallet ${walletId}. Total IDs: ${wallet.txIds.length}`)
             }
         }
 
@@ -439,7 +420,6 @@ export class WalletManager {
             const url = new URL(uri.replace('nostr+walletconnect://', 'nwc://'))
             return url.hostname
         } catch (e) {
-            console.error('Failed to extract pubkey from URI:', e)
             return null
         }
     }

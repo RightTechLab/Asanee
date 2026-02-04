@@ -40,7 +40,6 @@ export class SecurityService {
 
             return false;
         } catch (error) {
-            console.error('Authentication Error:', error);
             Alert.alert('Security', 'Authentication failed');
             return false;
         }

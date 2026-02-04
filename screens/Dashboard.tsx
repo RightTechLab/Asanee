@@ -53,7 +53,6 @@ export default function Dashboard() {
             setWalletBalances(balances)
             // setTotalBalance(sum) // Remove this - Total Balance should reflect the real wallet, not the sum of budgets
         } catch (error) {
-            console.error('Failed to refresh balances:', error)
         } finally {
             setLoading(false)
         }

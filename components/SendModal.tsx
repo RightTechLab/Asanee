@@ -93,7 +93,6 @@ export default function SendModal({ visible, onDismiss, initialInvoice = '', onP
             onPaymentSuccess()
             reset()
         } catch (err) {
-            console.error('Payment failed:', err)
             setError(err instanceof Error ? err.message : 'Payment failed. Please check the destination and your balance.')
         } finally {
             setLoading(false)

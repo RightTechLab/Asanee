@@ -31,7 +31,6 @@ export default function ReceiveModal({ visible, onDismiss, walletName, walletId 
             )
             setInvoice(response.invoice)
         } catch (error) {
-            console.error('Invoice generation failed:', error)
         } finally {
             setLoading(false)
         }

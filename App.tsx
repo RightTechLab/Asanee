@@ -26,14 +26,12 @@ export default function App() {
     try {
       const savedUri = await StorageService.load<string>('master_nwc_uri')
       if (savedUri) {
-        console.log('🔄 Auto-reconnecting to saved wallet...')
         await walletManager.connect(savedUri)
         const wallets = walletManager.listWallets()
         setSubWallets(wallets)
         setConnected(true)
       }
     } catch (error) {
-      console.error('Failed to auto-reconnect:', error)
     } finally {
       setInitializing(false)
     }
