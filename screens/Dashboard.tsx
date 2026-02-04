@@ -5,6 +5,9 @@ import { useWalletStore } from '../store/walletStore'
 import { walletManager } from '../services/WalletManager'
 import CreateWalletModal from '../components/CreateWalletModal'
 import { SubWallet } from '../types'
+import { SecurityService } from '../services/SecurityService'
+import { Eye, EyeOff } from 'lucide-react-native'
+
 
 export default function Dashboard() {
     const [modalVisible, setModalVisible] = useState(false)
@@ -16,6 +19,8 @@ export default function Dashboard() {
     const updateSubWallet = useWalletStore((state) => state.updateSubWallet)
     const totalBalance = useWalletStore((state) => state.totalBalance)
     const setTotalBalance = useWalletStore((state) => state.setTotalBalance)
+    const isBalanceVisible = useWalletStore((state) => state.isBalanceVisible)
+    const setBalanceVisible = useWalletStore((state) => state.setBalanceVisible)
 
     const [loading, setLoading] = useState(false)
     const [walletBalances, setWalletBalances] = useState<Record<string, number | null>>({})
@@ -99,6 +104,17 @@ export default function Dashboard() {
         refreshTotalBalance()
     }
 
+    const toggleBalanceVisibility = async () => {
+        if (!isBalanceVisible) {
+            const ok = await SecurityService.authenticate('Authorize to reveal balances')
+            if (ok) {
+                setBalanceVisible(true)
+            }
+        } else {
+            setBalanceVisible(false)
+        }
+    }
+
     const activeWallets = subWallets.filter(w => w.status === 'active')
     const revokedWallets = subWallets.filter(w => w.status === 'revoked')
 
@@ -126,9 +142,17 @@ export default function Dashboard() {
                 {/* Total Balance Card */}
                 <Card style={styles.totalBalanceCard}>
                     <Card.Content style={styles.totalBalanceContent}>
-                        <Text style={styles.totalBalanceLabel}>Total Balance</Text>
+                        <View style={styles.totalBalanceHeader}>
+                            <Text style={styles.totalBalanceLabel}>Total Balance</Text>
+                            <IconButton
+                                icon={() => isBalanceVisible ? <EyeOff size={18} color="#888" /> : <Eye size={18} color="#888" />}
+                                onPress={toggleBalanceVisibility}
+                            />
+                        </View>
                         <Text style={styles.totalBalanceAmount}>
-                            {totalBalance !== null ? (totalBalance / 1000).toLocaleString() : '---'} <Text style={styles.totalBalanceSats}>sats</Text>
+                            {isBalanceVisible
+                                ? (totalBalance !== null ? (totalBalance / 1000).toLocaleString() : '---')
+                                : '*****'} <Text style={styles.totalBalanceSats}>sats</Text>
                         </Text>
                     </Card.Content>
                 </Card>
@@ -163,9 +187,11 @@ export default function Dashboard() {
                                     right={() => (
                                         <View style={styles.walletRight}>
                                             <Text style={styles.walletBalanceText}>
-                                                {walletBalances[wallet.id] !== undefined && walletBalances[wallet.id] !== null
-                                                    ? (walletBalances[wallet.id]! / 1000).toLocaleString()
-                                                    : '---'} sats
+                                                {isBalanceVisible
+                                                    ? (walletBalances[wallet.id] !== undefined && walletBalances[wallet.id] !== null
+                                                        ? (walletBalances[wallet.id]! / 1000).toLocaleString()
+                                                        : '---')
+                                                    : '*****'} sats
                                             </Text>
                                             <IconButton
                                                 icon={expandedWallets[wallet.id] ? "chevron-up" : "chevron-down"}
@@ -304,7 +330,13 @@ const styles = StyleSheet.create({
     },
     totalBalanceContent: {
         alignItems: 'center',
-        paddingVertical: 20,
+        paddingVertical: 16,
+    },
+    totalBalanceHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        marginLeft: 40, // offset to keep label centered despite icon
     },
     totalBalanceLabel: {
         color: '#888',

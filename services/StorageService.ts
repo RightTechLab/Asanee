@@ -1,40 +1,58 @@
-import { SubWallet, NWCPermission } from '../types'
+import * as SecureStore from 'expo-secure-store'
+import { SubWallet } from '../types'
 
 /**
  * Storage Service - handles encrypted storage using expo-secure-store
  */
 export class StorageService {
     /**
-     * Save encrypted data to secure storage
+     * Save data to secure storage
      */
     static async save(key: string, data: any): Promise<void> {
-        const { setItemAsync } = await import('expo-secure-store')
-        await setItemAsync(key, JSON.stringify(data))
+        try {
+            const value = typeof data === 'string' ? data : JSON.stringify(data)
+            await SecureStore.setItemAsync(key, value)
+        } catch (error) {
+            console.error(`Error saving to SecureStore [${key}]:`, error)
+        }
     }
 
     /**
-     * Load encrypted data from secure storage
+     * Load data from secure storage
      */
     static async load<T>(key: string): Promise<T | null> {
-        const { getItemAsync } = await import('expo-secure-store')
-        const data = await getItemAsync(key)
-        if (!data) return null
-        return JSON.parse(data) as T
+        try {
+            const data = await SecureStore.getItemAsync(key)
+            if (!data) return null
+
+            // Try to parse as JSON, if it fails, return as is (for strings)
+            try {
+                return JSON.parse(data) as T
+            } catch {
+                return data as unknown as T
+            }
+        } catch (error) {
+            console.error(`Error loading from SecureStore [${key}]:`, error)
+            return null
+        }
     }
 
     /**
      * Delete key from secure storage
      */
     static async delete(key: string): Promise<void> {
-        const { deleteItemAsync } = await import('expo-secure-store')
-        await deleteItemAsync(key)
+        try {
+            await SecureStore.deleteItemAsync(key)
+        } catch (error) {
+            console.error(`Error deleting from SecureStore [${key}]:`, error)
+        }
     }
 
     /**
-     * Clear all data
+     * Clear all data - Note: SecureStore doesn't have a clear all method
      */
     static async clear(): Promise<void> {
-        // Note: expo-secure-store doesn't have a clear all method
-        // Would need to track keys separately
+        // Implementation would require tracking keys
+        // For now, we manually delete known keys in WalletManager.disconnect
     }
 }

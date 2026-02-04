@@ -7,6 +7,7 @@ interface WalletState {
     selectedWalletId: string | null
     activeTransactions: Transaction[]
     totalBalance: number | null
+    isBalanceVisible: boolean
     setConnected: (connected: boolean) => void
     setSubWallets: (wallets: SubWallet[]) => void
     addSubWallet: (wallet: SubWallet) => void
@@ -14,6 +15,7 @@ interface WalletState {
     setSelectedWalletId: (id: string | null) => void
     setActiveTransactions: (transactions: Transaction[]) => void
     setTotalBalance: (balance: number | null) => void
+    setBalanceVisible: (visible: boolean) => void
 }
 
 export const useWalletStore = create<WalletState>((set) => ({
@@ -22,6 +24,7 @@ export const useWalletStore = create<WalletState>((set) => ({
     selectedWalletId: null,
     activeTransactions: [],
     totalBalance: null,
+    isBalanceVisible: false,
 
     setConnected: (connected) => set({ isConnected: connected }),
 
@@ -41,5 +44,7 @@ export const useWalletStore = create<WalletState>((set) => ({
 
     setActiveTransactions: (transactions) => set({ activeTransactions: transactions }),
 
-    setTotalBalance: (balance) => set({ totalBalance: balance })
+    setTotalBalance: (balance) => set({ totalBalance: balance }),
+
+    setBalanceVisible: (visible) => set({ isBalanceVisible: visible })
 }))

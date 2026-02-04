@@ -8,8 +8,9 @@ import ReceiveModal from '../components/ReceiveModal'
 import SendModal from '../components/SendModal'
 import QRScanner from '../components/QRScanner'
 import WalletInfoModal from '../components/WalletInfoModal'
-import { ArrowDownLeft, ArrowUpRight, Scan, History, Link } from 'lucide-react-native'
+import { ArrowDownLeft, ArrowUpRight, Scan, History, Link, Eye, EyeOff } from 'lucide-react-native'
 import { SecurityService } from '../services/SecurityService'
+
 
 export default function SubWalletScreen() {
     const selectedWalletId = useWalletStore((state) => state.selectedWalletId)
@@ -25,6 +26,8 @@ export default function SubWalletScreen() {
     const [scannerVisible, setScannerVisible] = useState(false)
     const [scannedInvoice, setScannedInvoice] = useState('')
     const [infoVisible, setInfoVisible] = useState(false)
+    const isBalanceVisible = useWalletStore((state) => state.isBalanceVisible)
+    const setBalanceVisible = useWalletStore((state) => state.setBalanceVisible)
 
     const wallet = subWallets.find(w => w.id === selectedWalletId)
 
@@ -76,6 +79,17 @@ export default function SubWalletScreen() {
         setSendVisible(true)
     }
 
+    const toggleBalanceVisibility = async () => {
+        if (!isBalanceVisible) {
+            const ok = await SecurityService.authenticate('Authorize to reveal balance')
+            if (ok) {
+                setBalanceVisible(true)
+            }
+        } else {
+            setBalanceVisible(false)
+        }
+    }
+
     if (!wallet) return null
 
     if (scannerVisible) {
@@ -112,20 +126,30 @@ export default function SubWalletScreen() {
                 {/* Balance Card */}
                 <Card style={styles.balanceCard}>
                     <Card.Content style={styles.balanceContent}>
-                        <Text style={styles.balanceLabel}>
-                            {wallet.budgetMsat !== undefined ? 'Remaining Budget' : 'Sub-Wallet Balance'}
-                        </Text>
+                        <View style={styles.balanceHeader}>
+                            <Text style={styles.balanceLabel}>
+                                {wallet.budgetMsat !== undefined ? 'Remaining Budget' : 'Sub-Wallet Balance'}
+                            </Text>
+                            <IconButton
+                                icon={() => isBalanceVisible ? <EyeOff size={18} color="#888" /> : <Eye size={18} color="#888" />}
+                                onPress={toggleBalanceVisibility}
+                            />
+                        </View>
                         <View>
                             {loading ? (
                                 <ActivityIndicator color="#FFD700" style={{ marginVertical: 10 }} />
                             ) : (
                                 <>
                                     <Text style={styles.balanceText}>
-                                        {balance !== null ? (balance / 1000).toLocaleString() : '---'} <Text style={styles.satsLabel}>sats</Text>
+                                        {isBalanceVisible
+                                            ? (balance !== null ? (balance / 1000).toLocaleString() : '---')
+                                            : '*****'} <Text style={styles.satsLabel}>sats</Text>
                                     </Text>
                                     {wallet.budgetMsat !== undefined && (
                                         <Text style={styles.budgetUsedText}>
-                                            {(wallet.spentMsat / 1000).toLocaleString()} / {(wallet.budgetMsat / 1000).toLocaleString()} sats spent
+                                            {isBalanceVisible
+                                                ? `${(wallet.spentMsat / 1000).toLocaleString()} / ${(wallet.budgetMsat / 1000).toLocaleString()} sats spent`
+                                                : '**** / **** sats spent'}
                                         </Text>
                                     )}
                                 </>
@@ -266,7 +290,13 @@ const styles = StyleSheet.create({
     },
     balanceContent: {
         alignItems: 'center',
-        paddingVertical: 30,
+        paddingVertical: 20,
+    },
+    balanceHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        marginLeft: 40, // offset to keep label centered despite icon
     },
     balanceLabel: {
         color: '#888',
