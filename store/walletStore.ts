@@ -12,6 +12,7 @@ interface WalletState {
     setSubWallets: (wallets: SubWallet[]) => void
     addSubWallet: (wallet: SubWallet) => void
     updateSubWallet: (id: string, updates: Partial<SubWallet>) => void
+    removeSubWallet: (id: string) => void
     setSelectedWalletId: (id: string | null) => void
     setActiveTransactions: (transactions: Transaction[]) => void
     setTotalBalance: (balance: number | null) => void
@@ -38,6 +39,10 @@ export const useWalletStore = create<WalletState>((set) => ({
         subWallets: state.subWallets.map(w =>
             w.id === id ? { ...w, ...updates } : w
         )
+    })),
+
+    removeSubWallet: (id) => set((state) => ({
+        subWallets: state.subWallets.filter(w => w.id !== id)
     })),
 
     setSelectedWalletId: (id) => set({ selectedWalletId: id }),

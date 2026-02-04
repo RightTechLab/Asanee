@@ -4,6 +4,7 @@ import { Text, Card, IconButton, FAB, Menu, Button } from 'react-native-paper'
 import { useWalletStore } from '../store/walletStore'
 import { walletManager } from '../services/WalletManager'
 import CreateWalletModal from '../components/CreateWalletModal'
+import FundWalletModal from '../components/FundWalletModal'
 import { SubWallet } from '../types'
 import { SecurityService } from '../services/SecurityService'
 import { Eye, EyeOff } from 'lucide-react-native'
@@ -11,12 +12,15 @@ import { Eye, EyeOff } from 'lucide-react-native'
 
 export default function Dashboard() {
     const [modalVisible, setModalVisible] = useState(false)
+    const [fundModalVisible, setFundModalVisible] = useState(false)
+    const [selectedFundWallet, setSelectedFundWallet] = useState<SubWallet | null>(null)
     const [menuVisible, setMenuVisible] = useState<string | null>(null)
 
     const subWallets = useWalletStore((state) => state.subWallets)
     const setConnected = useWalletStore((state) => state.setConnected)
     const setSubWallets = useWalletStore((state) => state.setSubWallets)
     const updateSubWallet = useWalletStore((state) => state.updateSubWallet)
+    const removeSubWallet = useWalletStore((state) => state.removeSubWallet)
     const totalBalance = useWalletStore((state) => state.totalBalance)
     const setTotalBalance = useWalletStore((state) => state.setTotalBalance)
     const isBalanceVisible = useWalletStore((state) => state.isBalanceVisible)
@@ -47,7 +51,7 @@ export default function Dashboard() {
             }))
 
             setWalletBalances(balances)
-            setTotalBalance(sum)
+            // setTotalBalance(sum) // Remove this - Total Balance should reflect the real wallet, not the sum of budgets
         } catch (error) {
             console.error('Failed to refresh balances:', error)
         } finally {
@@ -76,21 +80,27 @@ export default function Dashboard() {
 
     const handleRevokeWallet = (wallet: SubWallet) => {
         Alert.alert(
-            'Revoke Wallet',
-            `Are you sure you want to revoke "${wallet.name}"?`,
+            'Delete Wallet',
+            `Are you sure you want to delete "${wallet.name}"?`,
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
-                    text: 'Revoke',
+                    text: 'Delete',
                     style: 'destructive',
                     onPress: async () => {
                         await walletManager.revokeSubWallet(wallet.id)
-                        updateSubWallet(wallet.id, { status: 'revoked' })
+                        removeSubWallet(wallet.id)
                         setMenuVisible(null)
                     },
                 },
             ]
         )
+    }
+
+    const handleFundWallet = (wallet: SubWallet) => {
+        setSelectedFundWallet(wallet)
+        setFundModalVisible(true)
+        setMenuVisible(null)
     }
 
     const handleCreateWallet = () => {
@@ -115,8 +125,7 @@ export default function Dashboard() {
         }
     }
 
-    const activeWallets = subWallets.filter(w => w.status === 'active')
-    const revokedWallets = subWallets.filter(w => w.status === 'revoked')
+    const activeWallets = subWallets
 
     return (
         <View style={styles.container}>
@@ -144,10 +153,12 @@ export default function Dashboard() {
                     <Card.Content style={styles.totalBalanceContent}>
                         <View style={styles.totalBalanceHeader}>
                             <Text style={styles.totalBalanceLabel}>Total Balance</Text>
-                            <IconButton
-                                icon={() => isBalanceVisible ? <EyeOff size={18} color="#888" /> : <Eye size={18} color="#888" />}
-                                onPress={toggleBalanceVisibility}
-                            />
+                            <View style={styles.eyeIconContainer}>
+                                <IconButton
+                                    icon={() => isBalanceVisible ? <EyeOff size={18} color="#888" /> : <Eye size={18} color="#888" />}
+                                    onPress={toggleBalanceVisibility}
+                                />
+                            </View>
                         </View>
                         <Text style={styles.totalBalanceAmount}>
                             {isBalanceVisible
@@ -217,9 +228,14 @@ export default function Dashboard() {
                                                 }
                                             >
                                                 <Menu.Item
+                                                    onPress={() => handleFundWallet(wallet)}
+                                                    title="Allocate Funds"
+                                                    leadingIcon="plus-circle"
+                                                />
+                                                <Menu.Item
                                                     onPress={() => handleRevokeWallet(wallet)}
-                                                    title="Revoke"
-                                                    leadingIcon="cancel"
+                                                    title="Delete"
+                                                    leadingIcon="delete"
                                                 />
                                             </Menu>
                                         </View>
@@ -261,25 +277,6 @@ export default function Dashboard() {
                         </Card>
                     )}
                 </View>
-
-                {/* Revoked Wallets */}
-                {revokedWallets.length > 0 && (
-                    <View style={styles.revokedSection}>
-                        <Text variant="titleMedium" style={styles.sectionTitle}>
-                            Revoked Wallets
-                        </Text>
-                        {revokedWallets.map((wallet) => (
-                            <Card key={wallet.id} style={styles.revokedCard}>
-                                <Card.Title
-                                    title={wallet.name}
-                                    titleStyle={styles.revokedTitle}
-                                    subtitle="Revoked"
-                                    subtitleStyle={styles.revokedSubtitle}
-                                />
-                            </Card>
-                        ))}
-                    </View>
-                )}
             </ScrollView>
 
             {/* FAB */}
@@ -295,6 +292,15 @@ export default function Dashboard() {
                 visible={modalVisible}
                 onDismiss={() => setModalVisible(false)}
                 onWalletCreated={handleWalletCreated}
+            />
+
+            {/* Fund Wallet Modal */}
+            <FundWalletModal
+                visible={fundModalVisible}
+                onDismiss={() => setFundModalVisible(false)}
+                wallet={selectedFundWallet}
+                onFunded={refreshTotalBalance}
+                masterBalance={totalBalance}
             />
         </View>
     )
@@ -316,6 +322,7 @@ const styles = StyleSheet.create({
     headerTitle: {
         color: '#FFD700',
         fontWeight: 'bold',
+        fontSize: 24,
     },
     headerSubtitle: {
         color: '#E0E0E0',
@@ -333,24 +340,28 @@ const styles = StyleSheet.create({
         paddingVertical: 16,
     },
     totalBalanceHeader: {
+        width: '100%',
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 4,
-        marginLeft: 40, // offset to keep label centered despite icon
+        justifyContent: 'center',
+    },
+    eyeIconContainer: {
+        position: 'absolute',
+        right: 0,
     },
     totalBalanceLabel: {
         color: '#888',
         fontSize: 14,
-        marginBottom: 4,
     },
     totalBalanceAmount: {
         color: '#FFFFFF',
-        fontSize: 32,
+        fontSize: 38, // Bigger balance
         fontWeight: 'bold',
+        textAlign: 'center',
     },
     totalBalanceSats: {
         color: '#FFD700',
-        fontSize: 18,
+        fontSize: 20,
     },
     sectionHeader: {
         flexDirection: 'row',
@@ -370,6 +381,16 @@ const styles = StyleSheet.create({
     },
     walletSubtitle: {
         color: '#888888',
+    },
+    balanceHeader: {
+        width: '100%',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    balanceLabel: {
+        color: '#888',
+        fontSize: 14,
     },
     walletRight: {
         flexDirection: 'row',
@@ -426,23 +447,9 @@ const styles = StyleSheet.create({
         color: '#888888',
         textAlign: 'center',
     },
-    revokedSection: {
-        marginTop: 24,
-    },
     sectionTitle: {
         color: '#888888',
         marginBottom: 12,
-    },
-    revokedCard: {
-        backgroundColor: '#0a0a0a',
-        marginBottom: 12,
-        opacity: 0.6,
-    },
-    revokedTitle: {
-        color: '#666666',
-    },
-    revokedSubtitle: {
-        color: '#444444',
     },
     fab: {
         position: 'absolute',

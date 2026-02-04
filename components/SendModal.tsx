@@ -16,6 +16,7 @@ interface SendModalProps {
 export default function SendModal({ visible, onDismiss, initialInvoice = '', onPaymentSuccess }: SendModalProps) {
     const [invoice, setInvoice] = useState(initialInvoice)
     const [amountSats, setAmountSats] = useState('')
+    const [balance, setBalance] = useState<number | null>(null)
     const [loading, setLoading] = useState(false)
     const [resolving, setResolving] = useState(false)
     const [error, setError] = useState('')
@@ -28,6 +29,13 @@ export default function SendModal({ visible, onDismiss, initialInvoice = '', onP
             setInvoice(initialInvoice)
         }
     }, [initialInvoice])
+
+    useEffect(() => {
+        const selectedId = useWalletStore.getState().selectedWalletId
+        if (visible && selectedId) {
+            walletManager.getWalletBalance(selectedId).then(setBalance)
+        }
+    }, [visible])
 
     // Detect LN Address
     useEffect(() => {
@@ -50,6 +58,17 @@ export default function SendModal({ visible, onDismiss, initialInvoice = '', onP
         try {
             let finalInvoice = invoice.trim()
             let finalAmountMsat: number | undefined = undefined
+
+            // Check balance first
+            if (balance !== null) {
+                // If it's a LN address, we know the amount early
+                if (isLNAddress && amountSats) {
+                    const reqSats = parseInt(amountSats)
+                    if (reqSats * 1000 > balance) {
+                        throw new Error(`Insufficient funds. This sub-wallet only has ${(balance / 1000).toLocaleString()} sats.`)
+                    }
+                }
+            }
 
             if (isLNAddress) {
                 if (!amountSats) {
@@ -131,6 +150,13 @@ export default function SendModal({ visible, onDismiss, initialInvoice = '', onP
                         autoCorrect={false}
                     />
 
+                    {balance !== null && (
+                        <Text style={styles.balanceHint}>
+                            Available: {(balance / 1000).toLocaleString()} sats
+                        </Text>
+                    )}
+
+
                     {isLNAddress && (
                         <TextInput
                             label="Amount (sats)"
@@ -201,9 +227,17 @@ const styles = StyleSheet.create({
     },
     errorText: {
         color: '#F44336',
+        marginTop: 4,
         marginBottom: 16,
         fontSize: 14,
     },
+    balanceHint: {
+        color: '#888',
+        fontSize: 12,
+        marginBottom: 12,
+        textAlign: 'right',
+    },
+
     button: {
         marginTop: 8,
         paddingVertical: 4,

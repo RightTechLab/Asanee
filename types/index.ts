@@ -25,9 +25,11 @@ export type SubWallet = {
     budgetMsat?: number
     spentMsat: number
     receivedMsat: number
+    fundingMsat?: number // Internal funds allocated from master
     createdAt: number
-    status: 'active' | 'revoked'
+    status: 'active'
     lastBalanceSync?: number
+    txIds?: string[] // Track transaction IDs associated with this wallet
 }
 
 export interface WalletConfig {

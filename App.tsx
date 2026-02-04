@@ -9,6 +9,7 @@ import SubWalletScreen from './screens/SubWalletScreen'
 import { useWalletStore } from './store/walletStore'
 import { walletManager } from './services/WalletManager'
 import { StorageService } from './services/StorageService'
+import { Text } from 'react-native-paper'
 
 export default function App() {
   const isConnected = useWalletStore((state) => state.isConnected)
@@ -38,23 +39,21 @@ export default function App() {
     }
   }
 
-  const renderContent = () => {
-    if (initializing) {
-      return (
+  if (initializing) {
+    return (
+      <PaperProvider theme={ElectricWaspTheme}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#FFD700" />
+          <StatusBar style="light" />
         </View>
-      )
-    }
-    if (!isConnected) return <ConnectScreen />
-    if (selectedWalletId) return <SubWalletScreen />
-    return <Dashboard />
+      </PaperProvider>
+    )
   }
 
   return (
     <PaperProvider theme={ElectricWaspTheme}>
       <View style={styles.container}>
-        {renderContent()}
+        {!isConnected ? <ConnectScreen /> : (selectedWalletId ? <SubWalletScreen /> : <Dashboard />)}
         <StatusBar style="light" />
       </View>
     </PaperProvider>
@@ -71,5 +70,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#000',
-  }
+  },
 })

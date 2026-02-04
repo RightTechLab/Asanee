@@ -103,8 +103,10 @@ export class WalletManager {
             budgetMsat: config.budgetMsat,
             spentMsat: 0,
             receivedMsat: 0,
+            fundingMsat: 0,
             createdAt: Date.now(),
-            status: 'active'
+            status: 'active',
+            txIds: []
         }
 
         this.subWallets.set(id, subWallet)
@@ -114,7 +116,7 @@ export class WalletManager {
     }
 
     /**
-     * Revoke a sub-wallet
+     * Delete a sub-wallet
      */
     async revokeSubWallet(id: string): Promise<void> {
 
@@ -125,7 +127,7 @@ export class WalletManager {
         }
 
         // TODO: In production, send 'revoke_connection' request to wallet provider
-        wallet.status = 'revoked'
+        this.subWallets.delete(id)
 
         await this.saveSubWallets()
     }
@@ -158,16 +160,37 @@ export class WalletManager {
     /**
      * Create a Lightning invoice
      */
-    async makeInvoice(amountMsat: number, description?: string): Promise<any> {
+    async makeInvoice(amountMsat: number, description?: string, walletId?: string): Promise<any> {
         if (!this.nwcClient) {
             throw new Error('Not connected')
         }
         try {
-            const invoice = await this.nwcClient.makeInvoice({
+            const response = await this.nwcClient.makeInvoice({
                 amount: amountMsat,
                 description: description,
             })
-            return invoice
+
+            console.log('DEBUG: makeInvoice response:', JSON.stringify(response))
+
+            // If we have a walletId, we should record this invoice ID to track it when paid
+            if (walletId) {
+                const txId = response.payment_hash || response.id
+                if (txId) {
+                    const wallet = this.subWallets.get(walletId)
+                    if (wallet) {
+                        if (!wallet.txIds) wallet.txIds = []
+                        if (!wallet.txIds.includes(txId)) {
+                            wallet.txIds.push(txId)
+                            console.log(`DEBUG: Associated prospective txId ${txId} with wallet ${wallet.name}`)
+                            await this.saveSubWallets()
+                        }
+                    }
+                } else {
+                    console.warn('DEBUG: makeInvoice returned no payment_hash or id')
+                }
+            }
+
+            return response
         } catch (error) {
             console.error('❌ Error generating invoice:', error);
             throw error
@@ -186,9 +209,20 @@ export class WalletManager {
                 invoice: invoice,
             })
 
+            console.log('DEBUG: payInvoice response:', JSON.stringify(response))
+
             // If we have an amount and walletId, record the spend
-            if (amountMsat && walletId) {
-                await this.recordTransaction(walletId, amountMsat, 'spent')
+            if (walletId) {
+                // response.payment_hash or response.id is usually the unique identifier
+                const txId = response.payment_hash || response.id
+                if (txId) {
+                    console.log(`DEBUG: Payment successful. Recording txId ${txId} to wallet ${walletId}`)
+                    await this.recordTransaction(walletId, amountMsat || 0, 'spent', txId)
+                } else {
+                    console.warn('DEBUG: payInvoice succeeded but returned no txId')
+                    // Still record the balance change even if we don't have a unique txId
+                    await this.recordTransaction(walletId, amountMsat || 0, 'spent')
+                }
             }
 
             return response
@@ -310,20 +344,26 @@ export class WalletManager {
             }
         }
 
-        // Logical sub-wallet: Balance is budget + received - spent
-        if (wallet.budgetMsat !== undefined) {
-            return Math.max(0, wallet.budgetMsat + wallet.receivedMsat - wallet.spentMsat)
-        }
+        // Logical sub-wallet: Balance is funding + received - spent
+        return Math.max(0, (wallet.fundingMsat || 0) + wallet.receivedMsat - wallet.spentMsat)
+    }
 
-        // No budget: Use master balance
-        const masterInfo = await this.getBalance()
-        return masterInfo.balance
+    /**
+     * Fund a sub-wallet from master balance (Internal accounting)
+     */
+    async fundSubWallet(id: string, amountMsat: number): Promise<void> {
+        const wallet = this.subWallets.get(id)
+        if (!wallet) throw new Error('Wallet not found')
+
+        wallet.fundingMsat = (wallet.fundingMsat || 0) + amountMsat
+        await this.saveSubWallets()
     }
 
     /**
      * Record a transaction against a sub-wallet
      */
-    async recordTransaction(walletId: string, amountMsat: number, type: 'spent' | 'received'): Promise<void> {
+    async recordTransaction(walletId: string, amountMsat: number, type: 'spent' | 'received', txId?: string): Promise<void> {
+        console.log(`DEBUG: Recording transaction for ${walletId}. Type: ${type}, ID: ${txId}`)
         const wallet = this.subWallets.get(walletId)
         if (!wallet) return
 
@@ -332,6 +372,27 @@ export class WalletManager {
         } else {
             wallet.receivedMsat += amountMsat
         }
+
+        if (txId) {
+            if (!wallet.txIds) wallet.txIds = []
+            if (!wallet.txIds.includes(txId)) {
+                wallet.txIds.push(txId)
+                console.log(`DEBUG: Added txId ${txId} to wallet ${walletId}. Total IDs: ${wallet.txIds.length}`)
+            }
+        }
+
+        await this.saveSubWallets()
+    }
+
+    /**
+     * Sync wallet totals with reality
+     */
+    async syncWalletTotals(walletId: string, spentMsat: number, receivedMsat: number): Promise<void> {
+        const wallet = this.subWallets.get(walletId)
+        if (!wallet) return
+
+        wallet.spentMsat = spentMsat
+        wallet.receivedMsat = receivedMsat
 
         await this.saveSubWallets()
     }
@@ -346,7 +407,12 @@ export class WalletManager {
 
         const wallets = await StorageService.load<SubWallet[]>(storageKey)
         if (wallets) {
-            this.subWallets = new Map(wallets.map(w => [w.id, w]))
+            // Ensure txIds exists for all wallets
+            const sanitized = wallets.map(w => ({
+                ...w,
+                txIds: w.txIds || []
+            }))
+            this.subWallets = new Map(sanitized.map(w => [w.id, w]))
         } else {
             this.subWallets.clear()
         }

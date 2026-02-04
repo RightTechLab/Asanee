@@ -16,6 +16,7 @@ export default function SubWalletScreen() {
     const selectedWalletId = useWalletStore((state) => state.selectedWalletId)
     const subWallets = useWalletStore((state) => state.subWallets)
     const setSelectedWalletId = useWalletStore((state) => state.setSelectedWalletId)
+    const updateSubWallet = useWalletStore((state) => state.updateSubWallet)
     const transactions = useWalletStore((state) => state.activeTransactions)
     const setActiveTransactions = useWalletStore((state) => state.setActiveTransactions)
 
@@ -51,17 +52,59 @@ export default function SubWalletScreen() {
 
             // Fetch transactions separately so failure doesn't block balance
             try {
-                const txs = await walletManager.listTransactions(20)
+                const txs = await walletManager.listTransactions(50) // Fetch more to allow for filtering
+
                 // Transform NWC transactions to our Transaction type
-                const subWalletTxs: Transaction[] = txs.map((t: any, index: number) => ({
-                    id: t.id || `tx-${Date.now()}-${index}`,
-                    type: t.type === 'incoming' ? 'incoming' : 'outgoing',
-                    amountMsat: t.amount,
-                    description: t.description || (t.type === 'incoming' ? 'Received' : 'Sent'),
-                    timestamp: (t.created_at || Date.now() / 1000) * 1000,
-                    status: 'completed'
-                }))
+                const allTxs: Transaction[] = txs.map((t: any, index: number) => {
+                    const txId = t.payment_hash || t.id || `tx-${Date.now()}-${index}`;
+                    return {
+                        id: txId,
+                        type: t.type === 'incoming' ? 'incoming' : 'outgoing',
+                        amountMsat: t.amount,
+                        description: t.description || (t.type === 'incoming' ? 'Received' : 'Sent'),
+                        timestamp: (t.created_at || Date.now() / 1000) * 1000,
+                        status: 'completed'
+                    }
+                })
+                console.log(`DEBUG: Fetched ${allTxs.length} transactions total. Sub-wallet IDs:`, wallet?.txIds);
+
+                // CRITICAL: Refresh wallet in store from manager FIRST to get latest txIds
+                const currentWallet = walletManager.getWallet(selectedWalletId)
+                if (currentWallet) {
+                    updateSubWallet(currentWallet.id, currentWallet)
+                }
+
+                const activeWallet = currentWallet || wallet
+
+                // Filter by wallet matching txIds
+                // If txIds exists (even if empty), we filter.
+                // If it doesn't exist at all (legacy data), we fallback to all for migration.
+                const subWalletTxs = activeWallet?.txIds
+                    ? allTxs.filter(tx => activeWallet.txIds?.includes(tx.id))
+                    : allTxs
+
+                console.log(`DEBUG: [${activeWallet?.name}] IDs tracked:`, activeWallet?.txIds?.length, 'Found matching:', subWalletTxs.length);
+                if ((activeWallet?.txIds?.length || 0) > 0 && subWalletTxs.length === 0) {
+                    console.log(`DEBUG: All IDs were filtered out. First tracked ID: ${activeWallet?.txIds?.[0]}. First fetched ID: ${allTxs?.[0]?.id}`);
+                }
+
+                // Update wallet spent/received based on transactions
+                let totalSpent = 0
+                let totalReceived = 0
+                subWalletTxs.forEach(t => {
+                    if (t.type === 'outgoing') totalSpent += t.amountMsat
+                    else totalReceived += t.amountMsat
+                })
+
+                if (activeWallet && (activeWallet.spentMsat !== totalSpent || activeWallet.receivedMsat !== totalReceived)) {
+                    await walletManager.syncWalletTotals(activeWallet.id, totalSpent, totalReceived)
+                    // Update store again after sync
+                    const synced = walletManager.getWallet(activeWallet.id)
+                    if (synced) updateSubWallet(synced.id, synced)
+                }
+
                 setActiveTransactions(subWalletTxs)
+                setBalance(await walletManager.getWalletBalance(selectedWalletId))
             } catch (e) {
                 console.error('Failed to fetch transactions:', e)
                 setActiveTransactions([]) // Clear or keep old ones?
@@ -130,10 +173,12 @@ export default function SubWalletScreen() {
                             <Text style={styles.balanceLabel}>
                                 {wallet.budgetMsat !== undefined ? 'Remaining Budget' : 'Sub-Wallet Balance'}
                             </Text>
-                            <IconButton
-                                icon={() => isBalanceVisible ? <EyeOff size={18} color="#888" /> : <Eye size={18} color="#888" />}
-                                onPress={toggleBalanceVisibility}
-                            />
+                            <View style={styles.eyeIconContainer}>
+                                <IconButton
+                                    icon={() => isBalanceVisible ? <EyeOff size={18} color="#888" /> : <Eye size={18} color="#888" />}
+                                    onPress={toggleBalanceVisibility}
+                                />
+                            </View>
                         </View>
                         <View>
                             {loading ? (
@@ -143,15 +188,13 @@ export default function SubWalletScreen() {
                                     <Text style={styles.balanceText}>
                                         {isBalanceVisible
                                             ? (balance !== null ? (balance / 1000).toLocaleString() : '---')
-                                            : '*****'} <Text style={styles.satsLabel}>sats</Text>
+                                            : '*****'} <Text style={styles.satsLabel}>{(balance !== null && Math.abs(balance / 1000) === 1) ? 'sat' : 'sats'}</Text>
                                     </Text>
-                                    {wallet.budgetMsat !== undefined && (
-                                        <Text style={styles.budgetUsedText}>
-                                            {isBalanceVisible
-                                                ? `${(wallet.spentMsat / 1000).toLocaleString()} / ${(wallet.budgetMsat / 1000).toLocaleString()} sats spent`
-                                                : '**** / **** sats spent'}
-                                        </Text>
-                                    )}
+                                    <Text style={styles.budgetUsedText}>
+                                        {isBalanceVisible
+                                            ? `${((wallet.fundingMsat || 0) / 1000).toLocaleString()} sats allocated • ${(wallet.spentMsat / 1000).toLocaleString()} sats spent`
+                                            : '**** sats allocated • **** sats spent'}
+                                    </Text>
                                 </>
                             )}
                         </View>
@@ -238,6 +281,7 @@ export default function SubWalletScreen() {
                 visible={receiveVisible}
                 onDismiss={() => setReceiveVisible(false)}
                 walletName={wallet.name}
+                walletId={wallet.id}
             />
             <SendModal
                 visible={sendVisible}
@@ -271,8 +315,9 @@ const styles = StyleSheet.create({
     headerTitle: {
         color: '#FFD700',
         fontWeight: 'bold',
+        fontSize: 24,
         flex: 1,
-        marginLeft: 10,
+        textAlign: 'center',
     },
     headerRight: {
         flexDirection: 'row',
@@ -293,29 +338,34 @@ const styles = StyleSheet.create({
         paddingVertical: 20,
     },
     balanceHeader: {
+        width: '100%',
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 4,
-        marginLeft: 40, // offset to keep label centered despite icon
+        justifyContent: 'center',
+    },
+    eyeIconContainer: {
+        position: 'absolute',
+        right: 0,
     },
     balanceLabel: {
         color: '#888',
         fontSize: 14,
-        marginBottom: 8,
     },
     balanceText: {
         color: '#FFFFFF',
-        fontSize: 36,
+        fontSize: 42, // Bigger balance
         fontWeight: 'bold',
+        textAlign: 'center',
     },
     satsLabel: {
-        fontSize: 18,
+        fontSize: 20,
         color: '#FFD700',
     },
     budgetUsedText: {
         color: '#888',
-        fontSize: 12,
+        fontSize: 13,
         marginTop: 8,
+        textAlign: 'center',
     },
     actionRow: {
         flexDirection: 'row',

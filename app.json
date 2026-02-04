@@ -13,6 +13,12 @@
         {
           "cameraPermission": "Allow Asanee to access your camera to scan Lightning invoices."
         }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow Asanee to use FaceID for secure access to your wallet."
+        }
       ]
     ],
     "splash": {

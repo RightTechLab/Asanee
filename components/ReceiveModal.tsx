@@ -10,9 +10,10 @@ interface ReceiveModalProps {
     visible: boolean
     onDismiss: () => void
     walletName: string
+    walletId?: string
 }
 
-export default function ReceiveModal({ visible, onDismiss, walletName }: ReceiveModalProps) {
+export default function ReceiveModal({ visible, onDismiss, walletName, walletId }: ReceiveModalProps) {
     const [amount, setAmount] = useState('')
     const [description, setDescription] = useState('')
     const [invoice, setInvoice] = useState<string | null>(null)
@@ -23,7 +24,11 @@ export default function ReceiveModal({ visible, onDismiss, walletName }: Receive
         setLoading(true)
         try {
             const amountMsat = parseInt(amount) * 1000
-            const response = await walletManager.makeInvoice(amountMsat, description || `Funding ${walletName}`)
+            const response = await walletManager.makeInvoice(
+                amountMsat,
+                description || `Funding ${walletName}`,
+                walletId
+            )
             setInvoice(response.invoice)
         } catch (error) {
             console.error('Invoice generation failed:', error)
