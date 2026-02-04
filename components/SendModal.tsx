@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { View, StyleSheet, Alert } from 'react-native'
 import { Modal, Portal, Text, TextInput, Button, IconButton } from 'react-native-paper'
 import { walletManager } from '../services/WalletManager'
+import { useWalletStore } from '../store/walletStore'
 
 interface SendModalProps {
     visible: boolean
@@ -20,12 +21,15 @@ export default function SendModal({ visible, onDismiss, initialInvoice = '', onP
         if (initialInvoice) setInvoice(initialInvoice)
     }, [initialInvoice])
 
+    const selectedWalletId = useWalletStore.getState().selectedWalletId
     const handlePay = async () => {
         if (!invoice) return
         setLoading(true)
         setError('')
         try {
-            await walletManager.payInvoice(invoice)
+            // Currently we don't decode amount from invoice here, but if we had it, we'd pass it
+            // For now we just pass walletId so it knows WHICH wallet is paying
+            await walletManager.payInvoice(invoice, undefined, selectedWalletId || undefined)
             Alert.alert('Success', 'Payment sent successfully!')
             onPaymentSuccess()
             reset()

@@ -32,23 +32,34 @@ export default function SubWalletScreen() {
     }, [selectedWalletId])
 
     const refreshWalletData = async () => {
+        if (!selectedWalletId) return
         setLoading(true)
         try {
-            const [balanceInfo, txs] = await Promise.all([
-                walletManager.getBalance(),
-                walletManager.listTransactions(20)
-            ])
-            setBalance(balanceInfo.balance)
-            // Transform NWC transactions to our Transaction type
-            const subWalletTxs: Transaction[] = txs.map((t: any) => ({
-                id: t.id,
-                type: t.type === 'incoming' ? 'incoming' : 'outgoing',
-                amountMsat: t.amount,
-                description: t.description || (t.type === 'incoming' ? 'Received' : 'Sent'),
-                timestamp: t.created_at * 1000,
-                status: 'completed'
-            }))
-            setActiveTransactions(subWalletTxs)
+            // Fetch balance
+            try {
+                const walletBalance = await walletManager.getWalletBalance(selectedWalletId)
+                setBalance(walletBalance)
+            } catch (e) {
+                console.error('Failed to fetch balance:', e)
+            }
+
+            // Fetch transactions separately so failure doesn't block balance
+            try {
+                const txs = await walletManager.listTransactions(20)
+                // Transform NWC transactions to our Transaction type
+                const subWalletTxs: Transaction[] = txs.map((t: any) => ({
+                    id: t.id,
+                    type: t.type === 'incoming' ? 'incoming' : 'outgoing',
+                    amountMsat: t.amount,
+                    description: t.description || (t.type === 'incoming' ? 'Received' : 'Sent'),
+                    timestamp: (t.created_at || Date.now() / 1000) * 1000,
+                    status: 'completed'
+                }))
+                setActiveTransactions(subWalletTxs)
+            } catch (e) {
+                console.error('Failed to fetch transactions:', e)
+                setActiveTransactions([]) // Clear or keep old ones?
+            }
         } catch (error) {
             console.error('Failed to refresh wallet data:', error)
         } finally {
@@ -89,13 +100,22 @@ export default function SubWalletScreen() {
                 {/* Balance Card */}
                 <Card style={styles.balanceCard}>
                     <Card.Content style={styles.balanceContent}>
-                        <Text style={styles.balanceLabel}>Available Balance</Text>
+                        <Text style={styles.balanceLabel}>
+                            {wallet.budgetMsat !== undefined ? 'Remaining Budget' : 'Sub-Wallet Balance'}
+                        </Text>
                         {loading ? (
                             <ActivityIndicator color="#FFD700" style={{ marginVertical: 10 }} />
                         ) : (
-                            <Text style={styles.balanceText}>
-                                {balance !== null ? (balance / 1000).toLocaleString() : '---'} <Text style={styles.satsLabel}>sats</Text>
-                            </Text>
+                            <>
+                                <Text style={styles.balanceText}>
+                                    {balance !== null ? (balance / 1000).toLocaleString() : '---'} <Text style={styles.satsLabel}>sats</Text>
+                                </Text>
+                                {wallet.budgetMsat !== undefined && (
+                                    <Text style={styles.budgetUsedText}>
+                                        {(wallet.spentMsat / 1000).toLocaleString()} / {(wallet.budgetMsat / 1000).toLocaleString()} sats spent
+                                    </Text>
+                                )}
+                            </>
                         )}
                     </Card.Content>
                 </Card>
@@ -230,6 +250,11 @@ const styles = StyleSheet.create({
     satsLabel: {
         fontSize: 18,
         color: '#FFD700',
+    },
+    budgetUsedText: {
+        color: '#888',
+        fontSize: 12,
+        marginTop: 8,
     },
     actionRow: {
         flexDirection: 'row',

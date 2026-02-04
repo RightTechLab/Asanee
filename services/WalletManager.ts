@@ -120,6 +120,8 @@ export class WalletManager {
             nwcUri: this.masterNWCUri, // Uses master URI for now
             permissions: config.permissions,
             budgetMsat: config.budgetMsat,
+            spentMsat: 0,
+            receivedMsat: 0,
             createdAt: Date.now(),
             status: 'active'
         }
@@ -203,7 +205,7 @@ export class WalletManager {
     /**
      * Pay a Lightning invoice
      */
-    async payInvoice(invoice: string): Promise<any> {
+    async payInvoice(invoice: string, amountMsat?: number, walletId?: string): Promise<any> {
         console.log('💸 Paying invoice:', invoice.substring(0, 30) + '...');
         if (!this.nwcClient) {
             throw new Error('Not connected')
@@ -213,6 +215,12 @@ export class WalletManager {
                 invoice: invoice,
             })
             console.log('✅ Payment successful:', response.preimage);
+
+            // If we have an amount and walletId, record the spend
+            if (amountMsat && walletId) {
+                await this.recordTransaction(walletId, amountMsat, 'spent')
+            }
+
             return response
         } catch (error) {
             console.error('❌ Payment failed:', error);
@@ -223,20 +231,40 @@ export class WalletManager {
     /**
      * List recent transactions
      */
-    async listTransactions(limit = 10): Promise<any> {
+    async listTransactions(limit = 10): Promise<any[]> {
         console.log('📚 Fetching transaction history...', { limit });
         if (!this.nwcClient) {
             throw new Error('Not connected')
         }
         try {
-            const transactions = await this.nwcClient.listTransactions({
-                limit,
-            })
-            console.log(`✅ Fetched ${transactions.length} transactions`);
-            return transactions
+            // First try standard method
+            try {
+                const response = await this.nwcClient.listTransactions({
+                    limit,
+                })
+                // The response might be the array or an object containing the array
+                let transactions: any[] = []
+                if (Array.isArray(response)) {
+                    transactions = response
+                } else if (response && Array.isArray(response.transactions)) {
+                    transactions = response.transactions
+                }
+
+                console.log(`✅ Fetched ${transactions.length} transactions via SDK`);
+                return transactions
+            } catch (err) {
+                console.log('⚠️  SDK listTransactions failed, trying raw call...');
+                // Fallback to raw call if SDK method fails or is missing
+                const response = await this.nwcClient.call('list_transactions', {
+                    limit,
+                })
+                const txs = response?.transactions || [];
+                console.log(`✅ Fetched ${txs.length} transactions via raw call`);
+                return txs
+            }
         } catch (error) {
             console.error('❌ Failed to fetch transactions:', error);
-            throw error
+            return [] // Return empty array on error to prevent crashes
         }
     }
 
@@ -248,6 +276,53 @@ export class WalletManager {
             throw new Error('Not connected')
         }
         return await this.nwcClient.getBalance()
+    }
+
+    /**
+     * Get specific sub-wallet balance
+     * If the sub-wallet has its own URI, we fetch from there.
+     * If it's the master connection, we show budget - spent.
+     */
+    async getWalletBalance(id: string): Promise<number | null> {
+        const wallet = this.subWallets.get(id)
+        if (!wallet) return null
+
+        // If sub-wallet has its own URI that isn't the master one
+        if (wallet.nwcUri !== this.masterNWCUri) {
+            try {
+                const tempClient = new NWCClient({ nostrWalletConnectUrl: wallet.nwcUri })
+                const info = await tempClient.getBalance()
+                return info.balance
+            } catch (e) {
+                console.error(`Failed to fetch balance for wallet ${id}:`, e)
+                return null
+            }
+        }
+
+        // Logical sub-wallet: Balance is budget + received - spent
+        if (wallet.budgetMsat !== undefined) {
+            return Math.max(0, wallet.budgetMsat + wallet.receivedMsat - wallet.spentMsat)
+        }
+
+        // No budget: Use master balance
+        const masterInfo = await this.getBalance()
+        return masterInfo.balance
+    }
+
+    /**
+     * Record a transaction against a sub-wallet
+     */
+    async recordTransaction(walletId: string, amountMsat: number, type: 'spent' | 'received'): Promise<void> {
+        const wallet = this.subWallets.get(walletId)
+        if (!wallet) return
+
+        if (type === 'spent') {
+            wallet.spentMsat += amountMsat
+        } else {
+            wallet.receivedMsat += amountMsat
+        }
+
+        await this.saveSubWallets()
     }
 
     /**

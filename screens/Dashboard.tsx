@@ -18,6 +18,7 @@ export default function Dashboard() {
     const setTotalBalance = useWalletStore((state) => state.setTotalBalance)
 
     const [loading, setLoading] = useState(false)
+    const [walletBalances, setWalletBalances] = useState<Record<string, number | null>>({})
 
     useEffect(() => {
         refreshTotalBalance()
@@ -28,8 +29,21 @@ export default function Dashboard() {
         try {
             const info = await walletManager.getBalance()
             setTotalBalance(info.balance)
+
+            // Also refresh individual wallet balances
+            const balances: Record<string, number | null> = {}
+            let sum = 0
+
+            await Promise.all(activeWallets.map(async (w) => {
+                const b = await walletManager.getWalletBalance(w.id)
+                balances[w.id] = b
+                if (b !== null) sum += b
+            }))
+
+            setWalletBalances(balances)
+            setTotalBalance(sum)
         } catch (error) {
-            console.error('Failed to fetch total balance:', error)
+            console.error('Failed to refresh balances:', error)
         } finally {
             setLoading(false)
         }
@@ -145,23 +159,30 @@ export default function Dashboard() {
                                 subtitle={`${wallet.permissions.length} permission${wallet.permissions.length !== 1 ? 's' : ''}`}
                                 subtitleStyle={styles.walletSubtitle}
                                 right={() => (
-                                    <Menu
-                                        visible={menuVisible === wallet.id}
-                                        onDismiss={() => setMenuVisible(null)}
-                                        anchor={
-                                            <IconButton
-                                                icon="dots-vertical"
-                                                iconColor="#FFD700"
-                                                onPress={() => setMenuVisible(wallet.id)}
+                                    <View style={styles.walletRight}>
+                                        <Text style={styles.walletBalanceText}>
+                                            {walletBalances[wallet.id] !== undefined && walletBalances[wallet.id] !== null
+                                                ? (walletBalances[wallet.id]! / 1000).toLocaleString()
+                                                : '---'} sats
+                                        </Text>
+                                        <Menu
+                                            visible={menuVisible === wallet.id}
+                                            onDismiss={() => setMenuVisible(null)}
+                                            anchor={
+                                                <IconButton
+                                                    icon="dots-vertical"
+                                                    iconColor="#FFD700"
+                                                    onPress={() => setMenuVisible(wallet.id)}
+                                                />
+                                            }
+                                        >
+                                            <Menu.Item
+                                                onPress={() => handleRevokeWallet(wallet)}
+                                                title="Revoke"
+                                                leadingIcon="cancel"
                                             />
-                                        }
-                                    >
-                                        <Menu.Item
-                                            onPress={() => handleRevokeWallet(wallet)}
-                                            title="Revoke"
-                                            leadingIcon="cancel"
-                                        />
-                                    </Menu>
+                                        </Menu>
+                                    </View>
                                 )}
                             />
                             <Card.Content>
@@ -295,6 +316,15 @@ const styles = StyleSheet.create({
     },
     walletSubtitle: {
         color: '#888888',
+    },
+    walletRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    walletBalanceText: {
+        color: '#FFD700',
+        fontWeight: 'bold',
+        fontSize: 14,
     },
     permissionContainer: {
         flexDirection: 'row',

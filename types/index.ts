@@ -4,6 +4,7 @@ export type NWCPermission =
     | 'make_invoice'
     | 'pay_invoice'
     | 'list_transactions'
+    | 'record_transaction'
 
 export interface Transaction {
     id: string
@@ -22,8 +23,11 @@ export type SubWallet = {
     nwcUri: string
     permissions: NWCPermission[]
     budgetMsat?: number
+    spentMsat: number
+    receivedMsat: number
     createdAt: number
     status: 'active' | 'revoked'
+    lastBalanceSync?: number
 }
 
 export interface WalletConfig {
