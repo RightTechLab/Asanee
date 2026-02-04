@@ -4,7 +4,7 @@
     "slug": "asanee",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/asanee_logo.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
     "plugins": [
@@ -22,15 +22,15 @@
       ]
     ],
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/asanee_logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
       "icon": {
-        "dark": "./assets/logo.png",
-        "light": "./assets/logo.png",
-        "tinted": "./assets/logo.png",
+        "dark": "./assets/asanee_logo.png",
+        "light": "./assets/asanee_logo.png",
+        "tinted": "./assets/asanee_logo.png",
       },
       "supportsTablet": true,
       "bundleIdentifier": "com.krittakrub.asanee",
@@ -40,8 +40,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo.png",
-        "monochromeImage": "./assets/logo.png",
+        "foregroundImage": "./assets/asanee_logo.png",
+        "monochromeImage": "./assets/asanee_logo.png",
         "backgroundColor": "#ffffff",
       },
       "newArchEnabled": true,
@@ -50,7 +50,7 @@
       "package": "com.krittakrub.asanee"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/asanee_logo.png"
     },
     "extra": {
       "eas": {
