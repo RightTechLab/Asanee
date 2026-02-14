@@ -51,16 +51,26 @@ export default function SubWalletScreen() {
 
             // Fetch transactions separately so failure doesn't block balance
             try {
-                const txs = await walletManager.listTransactions(50) // Fetch more to allow for filtering
+                const txs = await walletManager.listTransactions(50, selectedWalletId) // Fetch more to allow for filtering
 
                 // Transform NWC transactions to our Transaction type
                 const allTxs: Transaction[] = txs.map((t: any, index: number) => {
                     const txId = t.payment_hash || t.id || `tx-${Date.now()}-${index}`;
+
+                    // Determine type based on recorded role if available
+                    let type: 'incoming' | 'outgoing' = t.type === 'incoming' ? 'incoming' : 'outgoing'
+
+                    const currentWallet = walletManager.getWallet(selectedWalletId)
+                    if (currentWallet?.txRoles && currentWallet.txRoles[txId]) {
+                        if (currentWallet.txRoles[txId] === 'payer') type = 'outgoing'
+                        if (currentWallet.txRoles[txId] === 'payee') type = 'incoming'
+                    }
+
                     return {
                         id: txId,
-                        type: t.type === 'incoming' ? 'incoming' : 'outgoing',
+                        type: type,
                         amountMsat: t.amount,
-                        description: t.description || (t.type === 'incoming' ? 'Received' : 'Sent'),
+                        description: t.description || (type === 'incoming' ? 'Received' : 'Sent'),
                         timestamp: (t.created_at || Date.now() / 1000) * 1000,
                         status: 'completed'
                     }
@@ -74,11 +84,14 @@ export default function SubWalletScreen() {
 
                 const activeWallet = currentWallet || wallet
 
+                const isVirtual = !!activeWallet?.serviceSecretKey
+                const txIds = activeWallet?.txIds || []
+
                 // Filter by wallet matching txIds
-                // If txIds exists (even if empty), we filter.
-                // If it doesn't exist at all (legacy data), we fallback to all for migration.
-                const subWalletTxs = activeWallet?.txIds
-                    ? allTxs.filter(tx => activeWallet.txIds?.includes(tx.id))
+                // If it's a Virtual Wallet (has serviceSecretKey), we MUST filter because the source is the Master Node (mixed txs).
+                // If it's an Imported Wallet, the source is its own Node, so ALL txs are relevant.
+                const subWalletTxs = isVirtual
+                    ? allTxs.filter(tx => txIds.includes(tx.id))
                     : allTxs
 
                 // Update wallet spent/received based on transactions
@@ -204,16 +217,24 @@ export default function SubWalletScreen() {
                     </View>
                     <View style={styles.actionItem}>
                         <IconButton
-                            icon={() => <Scan size={24} color="#000" />}
-                            style={styles.actionButton}
+                            icon={() => <Scan size={24} color={wallet.permissions.includes('pay_invoice') ? "#000" : "#666"} />}
+                            style={[
+                                styles.actionButton,
+                                !wallet.permissions.includes('pay_invoice') && { backgroundColor: '#444', opacity: 0.5 }
+                            ]}
+                            disabled={!wallet.permissions.includes('pay_invoice')}
                             onPress={() => setScannerVisible(true)}
                         />
-                        <Text style={styles.actionLabel}>Scan</Text>
+                        <Text style={[styles.actionLabel, !wallet.permissions.includes('pay_invoice') && { color: '#666' }]}>Scan</Text>
                     </View>
                     <View style={styles.actionItem}>
                         <IconButton
-                            icon={() => <ArrowUpRight size={24} color="#000" />}
-                            style={styles.actionButton}
+                            icon={() => <ArrowUpRight size={24} color={wallet.permissions.includes('pay_invoice') ? "#000" : "#666"} />}
+                            style={[
+                                styles.actionButton,
+                                !wallet.permissions.includes('pay_invoice') && { backgroundColor: '#444', opacity: 0.5 }
+                            ]}
+                            disabled={!wallet.permissions.includes('pay_invoice')}
                             onPress={async () => {
                                 const ok = await SecurityService.authenticate('Authorize payment');
                                 if (ok) {
@@ -222,7 +243,7 @@ export default function SubWalletScreen() {
                                 }
                             }}
                         />
-                        <Text style={styles.actionLabel}>Send</Text>
+                        <Text style={[styles.actionLabel, !wallet.permissions.includes('pay_invoice') && { color: '#666' }]}>Send</Text>
                     </View>
                 </View>
 

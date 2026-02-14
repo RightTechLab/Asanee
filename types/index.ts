@@ -30,10 +30,13 @@ export type SubWallet = {
     status: 'active'
     lastBalanceSync?: number
     txIds?: string[] // Track transaction IDs associated with this wallet
+    txRoles?: Record<string, 'payer' | 'payee'> // Track role for each transaction (payer/payee)
+    serviceSecretKey?: string // Secret key for the NWC service provider for this wallet
 }
 
 export interface WalletConfig {
     name: string
     permissions: NWCPermission[]
     budgetMsat?: number
+    nwcUri?: string
 }

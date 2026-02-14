@@ -23,7 +23,9 @@ export default function CreateWalletModal({
     onDismiss,
     onWalletCreated,
 }: CreateWalletModalProps) {
+    const [mode, setMode] = useState<'create' | 'import'>('create')
     const [name, setName] = useState('')
+    const [nwcUri, setNwcUri] = useState('')
     const [selectedPermissions, setSelectedPermissions] = useState<Set<NWCPermission>>(
         new Set(['get_info', 'get_balance'])
     )
@@ -47,9 +49,20 @@ export default function CreateWalletModal({
             return
         }
 
-        if (selectedPermissions.size === 0) {
-            setError('Please select at least one permission')
-            return
+        if (mode === 'import') {
+            if (!nwcUri.trim()) {
+                setError('Please enter an NWC URI')
+                return
+            }
+            if (!nwcUri.startsWith('nostr+walletconnect://')) {
+                setError('Invalid NWC URI format')
+                return
+            }
+        } else {
+            if (selectedPermissions.size === 0) {
+                setError('Please select at least one permission')
+                return
+            }
         }
 
         setLoading(true)
@@ -58,8 +71,9 @@ export default function CreateWalletModal({
         try {
             const config: WalletConfig = {
                 name: name.trim(),
-                permissions: Array.from(selectedPermissions),
-                budgetMsat: budgetSats ? parseInt(budgetSats) * 1000 : undefined,
+                permissions: mode === 'create' ? Array.from(selectedPermissions) : [],
+                budgetMsat: (mode === 'create' && budgetSats) ? parseInt(budgetSats) * 1000 : undefined,
+                nwcUri: mode === 'import' ? nwcUri.trim() : undefined
             }
 
             const wallet = await walletManager.createSubWallet(config)
@@ -67,8 +81,10 @@ export default function CreateWalletModal({
 
             // Reset form
             setName('')
+            setNwcUri('')
             setSelectedPermissions(new Set(['get_info', 'get_balance']))
             setBudgetSats('')
+            setMode('create')
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to create wallet')
         } finally {
@@ -87,8 +103,29 @@ export default function CreateWalletModal({
                     <Card style={styles.card}>
                         <Card.Content>
                             <Text variant="headlineSmall" style={styles.title}>
-                                Create Sub-Wallet
+                                {mode === 'create' ? 'Create Sub-Wallet' : 'Import Wallet'}
                             </Text>
+
+                            <View style={styles.toggleRow}>
+                                <Button
+                                    mode={mode === 'create' ? 'contained' : 'outlined'}
+                                    onPress={() => setMode('create')}
+                                    style={styles.toggleButton}
+                                    buttonColor={mode === 'create' ? '#FFD700' : undefined}
+                                    textColor={mode === 'create' ? '#000000' : '#888888'}
+                                >
+                                    New
+                                </Button>
+                                <Button
+                                    mode={mode === 'import' ? 'contained' : 'outlined'}
+                                    onPress={() => setMode('import')}
+                                    style={styles.toggleButton}
+                                    buttonColor={mode === 'import' ? '#FFD700' : undefined}
+                                    textColor={mode === 'import' ? '#000000' : '#888888'}
+                                >
+                                    Import
+                                </Button>
+                            </View>
 
                             <TextInput
                                 label="Wallet Name"
@@ -100,36 +137,60 @@ export default function CreateWalletModal({
                                 error={!!error && !name.trim()}
                             />
 
-                            <Text variant="titleMedium" style={styles.sectionTitle}>
-                                Permissions
-                            </Text>
-
-                            {AVAILABLE_PERMISSIONS.map((perm) => (
-                                <View key={perm.key} style={styles.checkboxRow}>
-                                    <Checkbox
-                                        status={selectedPermissions.has(perm.key) ? 'checked' : 'unchecked'}
-                                        onPress={() => togglePermission(perm.key)}
-                                        color="#FFD700"
-                                    />
-                                    <Text style={styles.checkboxLabel} onPress={() => togglePermission(perm.key)}>
-                                        {perm.label}
+                            {mode === 'import' ? (
+                                <TextInput
+                                    label="NWC URI"
+                                    value={nwcUri}
+                                    onChangeText={setNwcUri}
+                                    mode="outlined"
+                                    placeholder="nostr+walletconnect://..."
+                                    style={styles.input}
+                                    multiline
+                                    numberOfLines={3}
+                                    error={!!error && (!nwcUri || !nwcUri.startsWith('nostr+walletconnect://'))}
+                                />
+                            ) : (
+                                <>
+                                    <Text variant="titleMedium" style={styles.sectionTitle}>
+                                        Access Level
                                     </Text>
-                                </View>
-                            ))}
+                                    <View style={styles.toggleRow}>
+                                        <Button
+                                            mode={selectedPermissions.has('pay_invoice') ? 'contained' : 'outlined'}
+                                            onPress={() => setSelectedPermissions(new Set(['get_info', 'get_balance', 'make_invoice', 'pay_invoice', 'list_transactions']))}
+                                            style={styles.toggleButton}
+                                            buttonColor={selectedPermissions.has('pay_invoice') ? '#FFD700' : undefined}
+                                            textColor={selectedPermissions.has('pay_invoice') ? '#000000' : '#888888'}
+                                        >
+                                            Full Access
+                                        </Button>
+                                        <Button
+                                            mode={!selectedPermissions.has('pay_invoice') ? 'contained' : 'outlined'}
+                                            onPress={() => setSelectedPermissions(new Set(['get_info', 'get_balance', 'make_invoice', 'list_transactions']))}
+                                            style={styles.toggleButton}
+                                            buttonColor={!selectedPermissions.has('pay_invoice') ? '#FFD700' : undefined}
+                                            textColor={!selectedPermissions.has('pay_invoice') ? '#000000' : '#888888'}
+                                        >
+                                            Receive Only
+                                        </Button>
+                                    </View>
 
-                            <Text variant="titleMedium" style={styles.sectionTitle}>
-                                Budget (Optional)
-                            </Text>
-
-                            <TextInput
-                                label="Budget in sats"
-                                value={budgetSats}
-                                onChangeText={setBudgetSats}
-                                mode="outlined"
-                                keyboardType="numeric"
-                                placeholder="e.g., 100000"
-                                style={styles.input}
-                            />
+                                    <Text variant="titleMedium" style={styles.sectionTitle}>
+                                        Budget (Optional)
+                                    </Text>
+                                    <View style={styles.budgetRow}>
+                                        <TextInput
+                                            label="Initial Balance (Sats)"
+                                            value={budgetSats}
+                                            onChangeText={setBudgetSats}
+                                            mode="outlined"
+                                            keyboardType="numeric"
+                                            placeholder="e.g., 1000"
+                                            style={styles.budgetInput}
+                                        />
+                                    </View>
+                                </>
+                            )}
 
                             {error ? (
                                 <Text style={styles.errorText}>{error}</Text>
@@ -153,7 +214,7 @@ export default function CreateWalletModal({
                                     buttonColor="#FFD700"
                                     textColor="#000000"
                                 >
-                                    Create
+                                    {mode === 'create' ? 'Create' : 'Import'}
                                 </Button>
                             </View>
                         </Card.Content>
@@ -200,6 +261,15 @@ const styles = StyleSheet.create({
         marginTop: 24,
         gap: 12,
     },
+    toggleRow: {
+        flexDirection: 'row',
+        marginBottom: 16,
+        gap: 12,
+    },
+    toggleButton: {
+        flex: 1,
+        borderColor: '#333333',
+    },
     cancelButton: {
         flex: 1,
         borderColor: '#333333',
@@ -210,5 +280,11 @@ const styles = StyleSheet.create({
     errorText: {
         color: '#CF6679',
         marginTop: 8,
+    },
+    budgetRow: {
+        marginBottom: 8,
+    },
+    budgetInput: {
+        flex: 1,
     },
 })
