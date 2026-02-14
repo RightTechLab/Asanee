@@ -30,7 +30,7 @@
       "icon": {
         "dark": "./assets/asanee_logo.png",
         "light": "./assets/asanee_logo.png",
-        "tinted": "./assets/asanee_logo.png",
+        "tinted": "./assets/asanee_logo.png"
       },
       "supportsTablet": true,
       "bundleIdentifier": "com.krittakrub.asanee",
@@ -42,7 +42,7 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/asanee_logo.png",
         "monochromeImage": "./assets/asanee_logo.png",
-        "backgroundColor": "#ffffff",
+        "backgroundColor": "#ffffff"
       },
       "newArchEnabled": true,
       "edgeToEdgeEnabled": true,

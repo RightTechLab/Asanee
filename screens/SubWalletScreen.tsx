@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react'
-import { View, StyleSheet, ScrollView, Alert, Share } from 'react-native'
-import { Text, Card, Button, IconButton, ActivityIndicator } from 'react-native-paper'
+import { View, StyleSheet, ScrollView } from 'react-native'
+import { Text, Card, IconButton, ActivityIndicator } from 'react-native-paper'
 import { useWalletStore } from '../store/walletStore'
 import { walletManager } from '../services/WalletManager'
-import { Transaction, SubWallet } from '../types'
+import { Transaction } from '../types'
 import ReceiveModal from '../components/ReceiveModal'
 import SendModal from '../components/SendModal'
 import QRScanner from '../components/QRScanner'
@@ -47,6 +47,7 @@ export default function SubWalletScreen() {
                 const walletBalance = await walletManager.getWalletBalance(selectedWalletId)
                 setBalance(walletBalance)
             } catch (e) {
+                console.error('Failed to fetch wallet balance', e)
             }
 
             // Fetch transactions separately so failure doesn't block balance
@@ -115,6 +116,7 @@ export default function SubWalletScreen() {
                 setActiveTransactions([]) // Clear or keep old ones?
             }
         } catch (error) {
+            console.error('Error refreshing wallet data', error)
         } finally {
             setLoading(false)
         }

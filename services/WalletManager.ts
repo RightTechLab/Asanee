@@ -43,6 +43,30 @@ export class WalletManager {
             // Save to secure storage
             await StorageService.save('master_nwc_uri', masterUri)
 
+            // Manage Master-NWC rotation (Keep Max 2)
+            if (this.activePubkey) {
+                const RECENT_KEYS_KEY = 'recent_master_pubkeys'
+                let recentKeys = (await StorageService.load<string[]>(RECENT_KEYS_KEY)) || []
+                
+                // Remove current if exists (to move to top)
+                recentKeys = recentKeys.filter(k => k !== this.activePubkey)
+                
+                // Add to top
+                recentKeys.unshift(this.activePubkey)
+
+                // Trim to 2
+                while (recentKeys.length > 2) {
+                    const removedKey = recentKeys.pop()
+                    if (removedKey) {
+                        await StorageService.delete(`sub_wallets_${removedKey}`)
+                        console.log(`[asanee] Rotated out old master data for: ${removedKey}`)
+                    }
+                }
+                
+                // Save updated list
+                await StorageService.save(RECENT_KEYS_KEY, recentKeys)
+            }
+
             // Load existing sub-wallets
             await this.loadSubWallets()
 
@@ -118,7 +142,8 @@ export class WalletManager {
     async createSubWallet(config: WalletConfig): Promise<SubWallet> {
         // If importing an existing wallet (NWC URI provided)
         if (config.nwcUri) {
-            const id = `imported_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+            const randomSuffix = this.toHex(generateSecretKey()).substr(0, 8)
+            const id = `imported_${Date.now()}_${randomSuffix}`
             const subWallet: SubWallet = {
                 id,
                 name: config.name,
@@ -152,7 +177,8 @@ export class WalletManager {
         const clientSecretKey = this.toHex(clientSecretKeyBytes)
 
         const nwcUri = `nostr+walletconnect://${servicePubkey}?relay=${encodeURIComponent(this.relayUrl)}&secret=${clientSecretKey}`
-        const id = `sub_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        const randomSuffix = this.toHex(generateSecretKey()).substr(0, 8)
+        const id = `sub_${Date.now()}_${randomSuffix}`
 
         const subWallet: SubWallet = {
             id,
@@ -221,9 +247,6 @@ export class WalletManager {
                 try {
                     const masterBalanceRes = await this.nwcClient.getBalance()
                     const masterBalance = masterBalanceRes.balance || 0
-
-                    console.log(`[asanee-nwc] Master balance: ${masterBalance} msat (${masterBalance / 1000} sats). Wallet budget limit: ${wallet.budgetMsat || 'none'}`)
-
                     let subBalance = masterBalance
 
                     // IF wallet has a specific budget, it is isolated (Limited)
@@ -270,18 +293,7 @@ export class WalletManager {
 
                     // Fallback amount detection from BOLT11 if missing
                     if (amount === 0 && req.invoice) {
-                        try {
-                            const match = req.invoice.toLowerCase().match(/lnbc(\d+)([pnum])?/)
-                            if (match) {
-                                const val = parseInt(match[1])
-                                const mult = match[2]
-                                if (mult === 'p') amount = Math.floor(val / 10)
-                                else if (mult === 'n') amount = val * 100
-                                else if (mult === 'u') amount = val * 100000
-                                else if (mult === 'm') amount = val * 100000000
-                                else amount = val * 100000000000
-                            }
-                        } catch (e) { }
+                        amount = this.parseInvoiceAmount(req.invoice)
                     }
 
                     const remaining = (wallet.budgetMsat || wallet.fundingMsat || Infinity) - wallet.spentMsat
@@ -306,7 +318,6 @@ export class WalletManager {
                             const preimageBytes = this.fromHex(res.preimage)
                             const hash = sha256(preimageBytes)
                             txId = this.toHex(hash)
-                            console.log(`[asanee-nwc] Calculated TX ID from preimage: ${txId}`)
                         } catch (e) {
                             console.error('[asanee-nwc] Failed to hash preimage', e)
                         }
@@ -483,18 +494,7 @@ export class WalletManager {
                 // Try to determine amount
                 let spent = amountMsat || response.amount || 0
                 if (spent === 0 && invoice) {
-                    try {
-                        const match = invoice.toLowerCase().match(/lnbc(\d+)([pnum])?/)
-                        if (match) {
-                            const val = parseInt(match[1])
-                            const mult = match[2]
-                            if (mult === 'p') spent = Math.floor(val / 10)
-                            else if (mult === 'n') spent = val * 100
-                            else if (mult === 'u') spent = val * 100000
-                            else if (mult === 'm') spent = val * 100000000
-                            else spent = val * 100000000000
-                        }
-                    } catch (e) { }
+                    spent = this.parseInvoiceAmount(invoice)
                 }
 
                 await this.recordTransaction(walletId!, spent, 'spent', txId, 'payer')
@@ -749,8 +749,24 @@ export class WalletManager {
     }
 
     /**
-     * Check if connected
+     * Parse amount from BOLT11 invoice
      */
+    private parseInvoiceAmount(invoice: string): number {
+        try {
+            const match = invoice.toLowerCase().match(/lnbc(\d+)([pnum])?/)
+            if (match) {
+                const val = parseInt(match[1])
+                const mult = match[2]
+                if (mult === 'p') return Math.floor(val / 10)
+                else if (mult === 'n') return val * 100
+                else if (mult === 'u') return val * 100000
+                else if (mult === 'm') return val * 100000000
+                else return val * 100000000000
+            }
+        } catch (e) { }
+        return 0
+    }
+
     isConnected(): boolean {
         return this.masterNWCUri !== null && this.nwcClient !== null
     }

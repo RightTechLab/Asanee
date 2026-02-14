@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { View, StyleSheet, ScrollView, Alert } from 'react-native'
-import { Text, Card, IconButton, FAB, Menu, Button } from 'react-native-paper'
+import { Text, Card, IconButton, FAB, Menu } from 'react-native-paper'
 import { useWalletStore } from '../store/walletStore'
 import { walletManager } from '../services/WalletManager'
 import CreateWalletModal from '../components/CreateWalletModal'
-import FundWalletModal from '../components/FundWalletModal'
+
 import { SubWallet } from '../types'
 import { SecurityService } from '../services/SecurityService'
 import { Eye, EyeOff } from 'lucide-react-native'
@@ -12,14 +12,12 @@ import { Eye, EyeOff } from 'lucide-react-native'
 
 export default function Dashboard() {
     const [modalVisible, setModalVisible] = useState(false)
-    const [fundModalVisible, setFundModalVisible] = useState(false)
-    const [selectedFundWallet, setSelectedFundWallet] = useState<SubWallet | null>(null)
     const [menuVisible, setMenuVisible] = useState<string | null>(null)
 
     const subWallets = useWalletStore((state) => state.subWallets)
     const setConnected = useWalletStore((state) => state.setConnected)
     const setSubWallets = useWalletStore((state) => state.setSubWallets)
-    const updateSubWallet = useWalletStore((state) => state.updateSubWallet)
+
     const removeSubWallet = useWalletStore((state) => state.removeSubWallet)
     const totalBalance = useWalletStore((state) => state.totalBalance)
     const setTotalBalance = useWalletStore((state) => state.setTotalBalance)
@@ -51,8 +49,8 @@ export default function Dashboard() {
             }))
 
             setWalletBalances(balances)
-            // setTotalBalance(sum) // Remove this - Total Balance should reflect the real wallet, not the sum of budgets
         } catch (error) {
+            console.error('Failed to refresh total balance', error)
         } finally {
             setLoading(false)
         }
@@ -96,11 +94,7 @@ export default function Dashboard() {
         )
     }
 
-    const handleFundWallet = (wallet: SubWallet) => {
-        setSelectedFundWallet(wallet)
-        setFundModalVisible(true)
-        setMenuVisible(null)
-    }
+
 
     const handleCreateWallet = () => {
         setModalVisible(true)
@@ -192,7 +186,7 @@ export default function Dashboard() {
                                 <Card.Title
                                     title={wallet.name}
                                     titleStyle={styles.walletTitle}
-                                    subtitle={`${wallet.permissions.length} permission${wallet.permissions.length !== 1 ? 's' : ''}`}
+                                    subtitle={wallet.permissions.length > 3 ? 'Full access' : 'Receive only'}
                                     subtitleStyle={styles.walletSubtitle}
                                     right={() => (
                                         <View style={styles.walletRight}>
@@ -227,11 +221,6 @@ export default function Dashboard() {
                                                 }
                                             >
                                                 <Menu.Item
-                                                    onPress={() => handleFundWallet(wallet)}
-                                                    title="Allocate Funds"
-                                                    leadingIcon="plus-circle"
-                                                />
-                                                <Menu.Item
                                                     onPress={() => handleRevokeWallet(wallet)}
                                                     title="Delete"
                                                     leadingIcon="delete"
@@ -249,7 +238,7 @@ export default function Dashboard() {
                                                 </View>
                                             ))}
                                         </View>
-                                        {wallet.budgetMsat && (
+                                        {!!wallet.budgetMsat && (
                                             <View style={styles.budgetRow}>
                                                 <Text style={styles.budgetText}>
                                                     Budget: {(wallet.budgetMsat / 1000).toLocaleString()} sats
@@ -293,14 +282,7 @@ export default function Dashboard() {
                 onWalletCreated={handleWalletCreated}
             />
 
-            {/* Fund Wallet Modal */}
-            <FundWalletModal
-                visible={fundModalVisible}
-                onDismiss={() => setFundModalVisible(false)}
-                wallet={selectedFundWallet}
-                onFunded={refreshTotalBalance}
-                masterBalance={totalBalance}
-            />
+
         </View>
     )
 }
