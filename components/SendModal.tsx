@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { View, StyleSheet, Alert } from 'react-native'
+import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native'
 import { Modal, Portal, Text, TextInput, Button, IconButton, ActivityIndicator } from 'react-native-paper'
 import { walletManager } from '../services/WalletManager'
 import { useWalletStore } from '../store/walletStore'
@@ -123,74 +123,81 @@ export default function SendModal({ visible, onDismiss, initialInvoice = '', onP
                 onDismiss={reset}
                 contentContainerStyle={styles.container}
             >
-                <View style={styles.content}>
-                    <View style={styles.header}>
-                        <Text variant="headlineSmall" style={styles.title}>Send Payment</Text>
-                        <View style={styles.headerActions}>
-                            <IconButton
-                                icon={() => <Scan size={20} color="#FFD700" />}
-                                onPress={() => setScannerVisible(true)}
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === "ios" ? "padding" : "height"}
+                    keyboardVerticalOffset={Platform.OS === "ios" ? 40 : 0}
+                >
+                    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                        <View style={styles.content}>
+                            <View style={styles.header}>
+                                <Text variant="headlineSmall" style={styles.title}>Send Payment</Text>
+                                <View style={styles.headerActions}>
+                                    <IconButton
+                                        icon={() => <Scan size={20} color="#FFD700" />}
+                                        onPress={() => setScannerVisible(true)}
+                                    />
+                                    <IconButton icon="close" iconColor="#888" onPress={reset} />
+                                </View>
+                            </View>
+
+                            <TextInput
+                                label="LN Invoice or LN Address"
+                                value={invoice}
+                                onChangeText={setInvoice}
+                                mode="outlined"
+                                multiline={!isLNAddress}
+                                numberOfLines={isLNAddress ? 1 : 3}
+                                style={styles.input}
+                                placeholder="lnbc... or user@domain.com"
+                                error={!!error}
+                                autoCapitalize="none"
+                                autoCorrect={false}
                             />
-                            <IconButton icon="close" iconColor="#888" onPress={reset} />
+
+                            {balance !== null && (
+                                <Text style={styles.balanceHint}>
+                                    Available: {(balance / 1000).toLocaleString()} sats
+                                </Text>
+                            )}
+
+
+                            {isLNAddress && (
+                                <TextInput
+                                    label="Amount (sats)"
+                                    value={amountSats}
+                                    onChangeText={setAmountSats}
+                                    mode="outlined"
+                                    keyboardType="numeric"
+                                    style={styles.input}
+                                    placeholder="1000"
+                                />
+                            )}
+
+                            {resolving && (
+                                <View style={styles.statusRow}>
+                                    <ActivityIndicator size="small" color="#FFD700" />
+                                    <Text style={styles.statusText}>Resolving address...</Text>
+                                </View>
+                            )}
+
+                            {error ? (
+                                <Text style={styles.errorText}>{error}</Text>
+                            ) : null}
+
+                            <Button
+                                mode="contained"
+                                onPress={handlePay}
+                                loading={loading}
+                                disabled={!invoice || loading || resolving}
+                                style={styles.button}
+                                buttonColor="#FFD700"
+                                textColor="#000"
+                            >
+                                {isLNAddress ? 'Pay Address' : 'Pay Invoice'}
+                            </Button>
                         </View>
-                    </View>
-
-                    <TextInput
-                        label="LN Invoice or LN Address"
-                        value={invoice}
-                        onChangeText={setInvoice}
-                        mode="outlined"
-                        multiline={!isLNAddress}
-                        numberOfLines={isLNAddress ? 1 : 3}
-                        style={styles.input}
-                        placeholder="lnbc... or user@domain.com"
-                        error={!!error}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                    />
-
-                    {balance !== null && (
-                        <Text style={styles.balanceHint}>
-                            Available: {(balance / 1000).toLocaleString()} sats
-                        </Text>
-                    )}
-
-
-                    {isLNAddress && (
-                        <TextInput
-                            label="Amount (sats)"
-                            value={amountSats}
-                            onChangeText={setAmountSats}
-                            mode="outlined"
-                            keyboardType="numeric"
-                            style={styles.input}
-                            placeholder="1000"
-                        />
-                    )}
-
-                    {resolving && (
-                        <View style={styles.statusRow}>
-                            <ActivityIndicator size="small" color="#FFD700" />
-                            <Text style={styles.statusText}>Resolving address...</Text>
-                        </View>
-                    )}
-
-                    {error ? (
-                        <Text style={styles.errorText}>{error}</Text>
-                    ) : null}
-
-                    <Button
-                        mode="contained"
-                        onPress={handlePay}
-                        loading={loading}
-                        disabled={!invoice || loading || resolving}
-                        style={styles.button}
-                        buttonColor="#FFD700"
-                        textColor="#000"
-                    >
-                        {isLNAddress ? 'Pay Address' : 'Pay Invoice'}
-                    </Button>
-                </View>
+                    </TouchableWithoutFeedback>
+                </KeyboardAvoidingView>
             </Modal>
         </Portal>
     )
