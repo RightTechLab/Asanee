@@ -45,7 +45,7 @@ export default function ConnectScreen() {
     }
 
     if (scannerVisible) {
-        return <QRScanner onScan={handleScan} onClose={() => setScannerVisible(false)} />
+        return <QRScanner onScan={handleScan} onClose={() => setScannerVisible(false)} title="Scan NWC Connection" />
     }
 
     return (

@@ -1,4 +1,5 @@
 import { StyleSheet, View, ActivityIndicator } from 'react-native'
+import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import React, { useEffect, useState } from 'react'
 import { PaperProvider } from 'react-native-paper'
@@ -9,7 +10,7 @@ import SubWalletScreen from './screens/SubWalletScreen'
 import { useWalletStore } from './store/walletStore'
 import { walletManager } from './services/WalletManager'
 import { StorageService } from './services/StorageService'
-import { Text } from 'react-native-paper'
+
 
 export default function App() {
   const isConnected = useWalletStore((state) => state.isConnected)
@@ -19,42 +20,45 @@ export default function App() {
   const [initializing, setInitializing] = useState(true)
 
   useEffect(() => {
+    const initWallet = async () => {
+      try {
+        const savedUri = await StorageService.load<string>('master_nwc_uri')
+        if (savedUri) {
+          await walletManager.connect(savedUri)
+          const wallets = walletManager.listWallets()
+          setSubWallets(wallets)
+          setConnected(true)
+        }
+      } catch (error) {
+      } finally {
+        setInitializing(false)
+      }
+    }
     initWallet()
   }, [])
 
-  const initWallet = async () => {
-    try {
-      const savedUri = await StorageService.load<string>('master_nwc_uri')
-      if (savedUri) {
-        await walletManager.connect(savedUri)
-        const wallets = walletManager.listWallets()
-        setSubWallets(wallets)
-        setConnected(true)
-      }
-    } catch (error) {
-    } finally {
-      setInitializing(false)
-    }
-  }
-
   if (initializing) {
     return (
-      <PaperProvider theme={ElectricWaspTheme}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FFD700" />
-          <StatusBar style="light" />
-        </View>
-      </PaperProvider>
+      <SafeAreaProvider>
+        <PaperProvider theme={ElectricWaspTheme}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#FFD700" />
+            <StatusBar style="light" />
+          </View>
+        </PaperProvider>
+      </SafeAreaProvider>
     )
   }
 
   return (
-    <PaperProvider theme={ElectricWaspTheme}>
-      <View style={styles.container}>
-        {!isConnected ? <ConnectScreen /> : (selectedWalletId ? <SubWalletScreen /> : <Dashboard />)}
-        <StatusBar style="light" />
-      </View>
-    </PaperProvider>
+    <SafeAreaProvider>
+      <PaperProvider theme={ElectricWaspTheme}>
+        <View style={styles.container}>
+          {!isConnected ? <ConnectScreen /> : (selectedWalletId ? <SubWalletScreen /> : <Dashboard />)}
+          <StatusBar style="light" />
+        </View>
+      </PaperProvider>
+    </SafeAreaProvider>
   )
 }
 

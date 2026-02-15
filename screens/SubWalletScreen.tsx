@@ -142,7 +142,7 @@ export default function SubWalletScreen() {
     if (!wallet) return null
 
     if (scannerVisible) {
-        return <QRScanner onScan={handleScan} onClose={() => setScannerVisible(false)} />
+        return <QRScanner onScan={handleScan} onClose={() => setScannerVisible(false)} title="Scan Lightning Invoice" />
     }
 
     return (
