@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { View, StyleSheet, ScrollView, Alert } from 'react-native'
+import { View, StyleSheet, ScrollView, Alert, Platform } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Text, Card, IconButton, FAB, Menu } from 'react-native-paper'
 import { useWalletStore } from '../store/walletStore'
 import { walletManager } from '../services/WalletManager'
@@ -12,6 +13,7 @@ import { Eye, EyeOff } from 'lucide-react-native'
 
 export default function Dashboard() {
     const [modalVisible, setModalVisible] = useState(false)
+    const insets = useSafeAreaInsets()
     const [menuVisible, setMenuVisible] = useState<string | null>(null)
 
     const subWallets = useWalletStore((state) => state.subWallets)
@@ -270,7 +272,7 @@ export default function Dashboard() {
             {/* FAB */}
             <FAB
                 icon="plus"
-                style={styles.fab}
+                style={[styles.fab, { marginBottom: (Platform.OS === 'android' ? 16 : 0) + insets.bottom }]}
                 onPress={handleCreateWallet}
                 color="#000000"
             />

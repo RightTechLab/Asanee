@@ -6,9 +6,10 @@ import { Button, Text, IconButton } from 'react-native-paper'
 interface QRScannerProps {
     onScan: (data: string) => void
     onClose: () => void
+    title?: string
 }
 
-export default function QRScanner({ onScan, onClose }: QRScannerProps) {
+export default function QRScanner({ onScan, onClose, title = 'Scan Lightning Invoice' }: QRScannerProps) {
     const [permission, requestPermission] = useCameraPermissions()
     const [scanned, setScanned] = useState(false)
 
@@ -50,7 +51,7 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
             >
                 <View style={styles.overlay}>
                     <View style={styles.header}>
-                        <Text style={styles.title}>Scan Lightning Invoice</Text>
+                        <Text style={styles.title}>{title}</Text>
                         <IconButton icon="close" iconColor="#fff" onPress={onClose} />
                     </View>
                     <View style={styles.scannerTarget}>
