@@ -155,7 +155,7 @@ export default function Dashboard() {
                         </View>
                         <Text style={styles.totalBalanceAmount}>
                             {isBalanceVisible
-                                ? (totalBalance !== null ? (totalBalance / 1000).toLocaleString() : '---')
+                                ? (totalBalance !== null ? Math.ceil(totalBalance / 1000).toLocaleString() : '---')
                                 : '*****'} <Text style={styles.totalBalanceSats}>sats</Text>
                         </Text>
                     </Card.Content>
@@ -193,7 +193,7 @@ export default function Dashboard() {
                                             <Text style={styles.walletBalanceText}>
                                                 {isBalanceVisible
                                                     ? (walletBalances[wallet.id] !== undefined && walletBalances[wallet.id] !== null
-                                                        ? (walletBalances[wallet.id]! / 1000).toLocaleString()
+                                                        ? Math.ceil(walletBalances[wallet.id]! / 1000).toLocaleString()
                                                         : '---')
                                                     : '*****'} sats
                                             </Text>
@@ -241,10 +241,10 @@ export default function Dashboard() {
                                         {!!wallet.budgetMsat && (
                                             <View style={styles.budgetRow}>
                                                 <Text style={styles.budgetText}>
-                                                    Budget: {(wallet.budgetMsat / 1000).toLocaleString()} sats
+                                                    Budget: {Math.ceil(wallet.budgetMsat / 1000).toLocaleString()} sats
                                                 </Text>
                                                 <Text style={styles.spentText}>
-                                                    Spent: {(wallet.spentMsat / 1000).toLocaleString()} sats
+                                                    Spent: {Math.ceil(wallet.spentMsat / 1000).toLocaleString()} sats
                                                 </Text>
                                             </View>
                                         )}

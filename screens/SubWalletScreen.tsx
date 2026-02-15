@@ -193,12 +193,12 @@ export default function SubWalletScreen() {
                                 <>
                                     <Text style={styles.balanceText}>
                                         {isBalanceVisible
-                                            ? (balance !== null ? (balance / 1000).toLocaleString() : '---')
-                                            : '*****'} <Text style={styles.satsLabel}>{(balance !== null && Math.abs(balance / 1000) === 1) ? 'sat' : 'sats'}</Text>
+                                            ? (balance !== null ? Math.floor(balance / 1000).toLocaleString() : '---')
+                                            : '*****'} <Text style={styles.satsLabel}>{(balance !== null && Math.abs(Math.floor(balance / 1000)) === 1) ? 'sat' : 'sats'}</Text>
                                     </Text>
                                     <Text style={styles.budgetUsedText}>
                                         {isBalanceVisible
-                                            ? `${((wallet.fundingMsat || 0) / 1000).toLocaleString()} sats allocated • ${(wallet.spentMsat / 1000).toLocaleString()} sats spent`
+                                            ? `${Math.floor((wallet.fundingMsat || 0) / 1000).toLocaleString()} sats allocated • ${Math.floor(wallet.spentMsat / 1000).toLocaleString()} sats spent`
                                             : '**** sats allocated • **** sats spent'}
                                     </Text>
                                 </>
@@ -278,7 +278,7 @@ export default function SubWalletScreen() {
                                             styles.txAmount,
                                             { color: tx.type === 'incoming' ? '#4CAF50' : '#F44336' }
                                         ]}>
-                                            {tx.type === 'incoming' ? '+' : '-'}{(tx.amountMsat / 1000).toLocaleString()}
+                                            {tx.type === 'incoming' ? '+' : '-'}{Math.floor(tx.amountMsat / 1000).toLocaleString()}
                                         </Text>
                                         <Text style={styles.txSats}>sats</Text>
                                     </View>
