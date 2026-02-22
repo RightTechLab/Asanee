@@ -177,7 +177,7 @@ export default function SubWalletScreen() {
                     <Card.Content style={styles.balanceContent}>
                         <View style={styles.balanceHeader}>
                             <Text style={styles.balanceLabel}>
-                                {wallet.budgetMsat !== undefined ? 'Remaining Budget' : 'Sub-Wallet Balance'}
+                                Sub-Wallet Balance
                             </Text>
                             <View style={styles.eyeIconContainer}>
                                 <IconButton
@@ -198,8 +198,8 @@ export default function SubWalletScreen() {
                                     </Text>
                                     <Text style={styles.budgetUsedText}>
                                         {isBalanceVisible
-                                            ? `${Math.floor((wallet.fundingMsat || 0) / 1000).toLocaleString()} sats allocated • ${Math.floor(wallet.spentMsat / 1000).toLocaleString()} sats spent`
-                                            : '**** sats allocated • **** sats spent'}
+                                            ? `${Math.floor(wallet.receivedMsat / 1000).toLocaleString()} sats received • ${Math.floor(wallet.spentMsat / 1000).toLocaleString()} sats spent`
+                                            : '**** sats received • **** sats spent'}
                                     </Text>
                                 </>
                             )}

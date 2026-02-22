@@ -31,7 +31,7 @@ export default function CreateWalletModal({
     const [selectedPermissions, setSelectedPermissions] = useState<Set<NWCPermission>>(
         new Set(['get_info', 'get_balance'])
     )
-    const [budgetSats, setBudgetSats] = useState('')
+
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
     const [scannerVisible, setScannerVisible] = useState(false)
@@ -75,7 +75,6 @@ export default function CreateWalletModal({
             const config: WalletConfig = {
                 name: name.trim(),
                 permissions: mode === 'create' ? Array.from(selectedPermissions) : [],
-                budgetMsat: (mode === 'create' && budgetSats) ? parseInt(budgetSats) * 1000 : undefined,
                 nwcUri: mode === 'import' ? nwcUri.trim() : undefined
             }
 
@@ -86,7 +85,7 @@ export default function CreateWalletModal({
             setName('')
             setNwcUri('')
             setSelectedPermissions(new Set(['get_info', 'get_balance']))
-            setBudgetSats('')
+
             setMode('create')
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to create wallet')
@@ -193,25 +192,6 @@ export default function CreateWalletModal({
                                             Receive Only
                                         </Button>
                                     </View>
-
-                                    {selectedPermissions.has('pay_invoice') && (
-                                        <>
-                                            <Text variant="titleMedium" style={styles.sectionTitle}>
-                                                Budget (Optional)
-                                            </Text>
-                                            <View style={styles.budgetRow}>
-                                                <TextInput
-                                                    label="Initial Balance (Sats)"
-                                                    value={budgetSats}
-                                                    onChangeText={setBudgetSats}
-                                                    mode="outlined"
-                                                    keyboardType="numeric"
-                                                    placeholder="e.g., 1000"
-                                                    style={styles.budgetInput}
-                                                />
-                                            </View>
-                                        </>
-                                    )}
                                 </>
                             )}
 

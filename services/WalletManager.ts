@@ -185,10 +185,8 @@ export class WalletManager {
             name: config.name,
             nwcUri: nwcUri,
             permissions: config.permissions,
-            budgetMsat: config.budgetMsat ?? 0,
             spentMsat: 0,
             receivedMsat: 0,
-            fundingMsat: 0,
             createdAt: Date.now(),
             status: 'active',
             txIds: [],
@@ -249,21 +247,9 @@ export class WalletManager {
                     const masterBalance = masterBalanceRes.balance || 0
                     let subBalance = masterBalance
 
-                    // IF wallet has a specific budget, it is isolated (Limited)
-                    if (wallet.budgetMsat !== undefined) {
-                        let limit = wallet.budgetMsat
-                        if (wallet.fundingMsat !== undefined) limit += wallet.fundingMsat
-
-                        // Add received funds to the limit (allowing the wallet to spend what it earns)
-                        limit += (wallet.receivedMsat || 0)
-
-                        subBalance = Math.min(subBalance, Math.max(0, limit - wallet.spentMsat))
-                    } else {
-                        // IF wallet has NO budget (undefined), calculate from virtual accounting
-                        // Virtual balance = funding + received - spent
-                        const virtualBalance = (wallet.fundingMsat || 0) + (wallet.receivedMsat || 0) - (wallet.spentMsat || 0)
-                        subBalance = Math.max(0, Math.min(masterBalance, virtualBalance))
-                    }
+                    // For virtual wallets: Virtual balance = received - spent
+                    const virtualBalance = (wallet.receivedMsat || 0) - (wallet.spentMsat || 0)
+                    subBalance = Math.max(0, Math.min(masterBalance, virtualBalance))
 
                     return {
                         result: { balance: subBalance },
@@ -296,13 +282,13 @@ export class WalletManager {
                         amount = this.parseInvoiceAmount(req.invoice)
                     }
 
-                    const remaining = (wallet.budgetMsat || wallet.fundingMsat || Infinity) - wallet.spentMsat
+                    const remaining = (wallet.receivedMsat || 0) - wallet.spentMsat
 
-                    console.log(`[asanee-nwc] Sub-wallet "${wallet.name}" request. Invoice amount: ${amount} msat. Remaining sub-budget: ${remaining} msat`)
+                    console.log(`[asanee-nwc] Sub-wallet "${wallet.name}" request. Invoice amount: ${amount} msat. Remaining balance: ${remaining} msat`)
 
                     if (amount > 0 && amount > remaining) {
-                        console.warn(`[asanee-nwc] Local budget limit hit! Required: ${amount}, Remaining: ${remaining}`)
-                        return { result: undefined, error: { code: "INSUFFICIENT_BALANCE", message: "Insufficient balance in sub-wallet budget" } }
+                        console.warn(`[asanee-nwc] Budget limit hit! Required: ${amount}, Remaining: ${remaining}`)
+                        return { result: undefined, error: { code: "INSUFFICIENT_BALANCE", message: "Insufficient balance in sub-wallet" } }
                     }
 
                     const res = await this.nwcClient.payInvoice(req)
@@ -654,8 +640,45 @@ export class WalletManager {
     async fundSubWallet(id: string, amountMsat: number): Promise<void> {
         const wallet = this.subWallets.get(id)
         if (!wallet) throw new Error('Wallet not found')
+        
+        // Ensure master client exists
+        if (!this.nwcClient) throw new Error('Master NWC not connected')
 
-        wallet.fundingMsat = (wallet.fundingMsat || 0) + amountMsat
+        // Get the sub-client to generate the invoice
+        const subClient = this.getClientForWallet(id)
+        if (!subClient || subClient === this.nwcClient) {
+             throw new Error('Cannot generate real transaction for virtual proxy wallet without dedicated NWC connection')
+        }
+
+        // Create an invoice from the sub-wallet
+        const invoiceRes = await subClient.makeInvoice({
+            amount: amountMsat,
+            description: `Top-Up from Master to ${wallet.name}`,
+        })
+        const invoice = invoiceRes.pr || invoiceRes.invoice
+        const txId = invoiceRes.payment_hash || invoiceRes.id
+
+        if (!invoice) throw new Error('Failed to generate top-up invoice')
+
+        // Record the expected transaction in the sub-wallet first
+        if (txId) {
+             if (!wallet.txIds) wallet.txIds = []
+             if (!wallet.txIds.includes(txId)) {
+                 wallet.txIds.push(txId)
+             }
+             if (!wallet.txRoles) wallet.txRoles = {}
+             wallet.txRoles[txId] = 'payee'
+             await this.saveSubWallets()
+        }
+
+        // Pay the invoice using the master wallet (direct NWC client)
+        await this.nwcClient.payInvoice({
+            invoice: invoice,
+            amount: amountMsat,
+        })
+        
+        // Update local tracking. Since it's a real transaction, it adds to receivedMsat
+        wallet.receivedMsat = (wallet.receivedMsat || 0) + amountMsat
         await this.saveSubWallets()
     }
 
@@ -725,28 +748,7 @@ export class WalletManager {
         await StorageService.save(storageKey, wallets)
     }
 
-    /**
-     * Calculate total funds reserved by OTHER sub-wallets
-     */
-    private getReservedBalance(excludeWalletId?: string): number {
-        let reserved = 0
-        for (const w of this.subWallets.values()) {
-            if (w.id === excludeWalletId) continue
 
-            // Only count wallets that have a defined budget (are isolated)
-            if (w.budgetMsat !== undefined) {
-                let limit = w.budgetMsat
-                if (w.fundingMsat !== undefined) limit += w.fundingMsat
-                limit += (w.receivedMsat || 0)
-
-                // The amount they effectively "hold" is their current balance (Limit - Spent)
-                // We assume they haven't overspent (Max(0, ...))
-                const currentBalance = Math.max(0, limit - w.spentMsat)
-                reserved += currentBalance
-            }
-        }
-        return reserved
-    }
 
     /**
     /**

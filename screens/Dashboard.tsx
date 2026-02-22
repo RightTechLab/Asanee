@@ -20,6 +20,10 @@ export default function Dashboard() {
     const [walletToRename, setWalletToRename] = useState<SubWallet | null>(null)
     const [newWalletName, setNewWalletName] = useState('')
 
+    const [topUpDialogVisible, setTopUpDialogVisible] = useState(false)
+    const [walletToTopUp, setWalletToTopUp] = useState<SubWallet | null>(null)
+    const [topUpAmount, setTopUpAmount] = useState('')
+
     const subWallets = useWalletStore((state) => state.subWallets)
     const setConnected = useWalletStore((state) => state.setConnected)
     const setSubWallets = useWalletStore((state) => state.setSubWallets)
@@ -117,6 +121,44 @@ export default function Dashboard() {
         } catch (error) {
             console.error('Failed to rename wallet', error)
             Alert.alert('Error', 'Failed to rename wallet')
+        }
+    }
+
+    const handleTopUpSubmit = async () => {
+        if (!walletToTopUp || !topUpAmount.trim()) return
+        
+        const amountSats = parseInt(topUpAmount.trim())
+        if (Number.isNaN(amountSats) || amountSats <= 0) {
+            Alert.alert('Error', 'Please enter a valid amount')
+            return
+        }
+        
+        const amountMsat = amountSats * 1000
+        const totalMasterMsat = totalBalance || 0
+        
+        const sumSubwalletsMsat = Object.values(walletBalances).reduce((acc, bal) => (acc || 0) + (bal || 0), 0) || 0
+        const availableMsat = Math.max(0, totalMasterMsat - sumSubwalletsMsat)
+        
+        if (amountMsat > availableMsat) {
+            Alert.alert(
+                'Insufficient Balance', 
+                `Maximum topup available is ${Math.floor(availableMsat / 1000).toLocaleString()} sats.`
+            )
+            return
+        }
+
+        try {
+            await walletManager.fundSubWallet(walletToTopUp.id, amountMsat)
+            const wallets = walletManager.listWallets()
+            setSubWallets(wallets)
+            setTopUpDialogVisible(false)
+            setWalletToTopUp(null)
+            setTopUpAmount('')
+            refreshTotalBalance()
+            Alert.alert('Success', 'Sub-wallet topped up successfully')
+        } catch (error) {
+            console.error('Failed to top up wallet', error)
+            Alert.alert('Error', 'Failed to top up wallet')
         }
     }
 
@@ -240,6 +282,18 @@ export default function Dashboard() {
                                                     />
                                                 }
                                             >
+                                                {wallet.permissions.length > 4 && (
+                                                    <Menu.Item
+                                                        onPress={() => {
+                                                            setWalletToTopUp(wallet)
+                                                            setTopUpAmount('')
+                                                            setTopUpDialogVisible(true)
+                                                            setMenuVisible(null)
+                                                        }}
+                                                        title="Top Up"
+                                                        leadingIcon="cash-plus"
+                                                    />
+                                                )}
                                                 <Menu.Item
                                                     onPress={() => {
                                                         setWalletToRename(wallet)
@@ -268,16 +322,7 @@ export default function Dashboard() {
                                                 </View>
                                             ))}
                                         </View>
-                                        {!!wallet.budgetMsat && (
-                                            <View style={styles.budgetRow}>
-                                                <Text style={styles.budgetText}>
-                                                    Budget: {Math.ceil(wallet.budgetMsat / 1000).toLocaleString()} sats
-                                                </Text>
-                                                <Text style={styles.spentText}>
-                                                    Spent: {Math.ceil(wallet.spentMsat / 1000).toLocaleString()} sats
-                                                </Text>
-                                            </View>
-                                        )}
+
                                     </Card.Content>
                                 )}
                             </Card>
@@ -329,6 +374,28 @@ export default function Dashboard() {
                     <Dialog.Actions>
                         <Button onPress={() => setRenameDialogVisible(false)} textColor="#888">Cancel</Button>
                         <Button onPress={handleRenameSubmit} textColor="#FFD700">Save</Button>
+                    </Dialog.Actions>
+                </Dialog>
+            </Portal>
+
+            {/* Top Up Wallet Dialog */}
+            <Portal>
+                <Dialog visible={topUpDialogVisible} onDismiss={() => setTopUpDialogVisible(false)} style={styles.dialog}>
+                    <Dialog.Title style={styles.dialogTitle}>Top Up Sub-Wallet</Dialog.Title>
+                    <Dialog.Content>
+                        <TextInput
+                            label="Amount (sats)"
+                            value={topUpAmount}
+                            onChangeText={setTopUpAmount}
+                            mode="outlined"
+                            keyboardType="numeric"
+                            style={styles.renameInput}
+                            autoFocus
+                        />
+                    </Dialog.Content>
+                    <Dialog.Actions>
+                        <Button onPress={() => setTopUpDialogVisible(false)} textColor="#888">Cancel</Button>
+                        <Button onPress={handleTopUpSubmit} textColor="#FFD700">Top Up</Button>
                     </Dialog.Actions>
                 </Dialog>
             </Portal>
