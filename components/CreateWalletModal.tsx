@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { View, StyleSheet, ScrollView } from 'react-native'
-import { Modal, Portal, Text, TextInput, Button, Checkbox, Card, IconButton } from 'react-native-paper'
+import { Modal, Portal, Text, TextInput, Button, Card, IconButton } from 'react-native-paper'
 import { walletManager } from '../services/WalletManager'
 import { NWCPermission, WalletConfig, SubWallet } from '../types'
 import QRScanner from './QRScanner'
