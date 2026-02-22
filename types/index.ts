@@ -22,10 +22,8 @@ export type SubWallet = {
     name: string
     nwcUri: string
     permissions: NWCPermission[]
-    budgetMsat?: number
     spentMsat: number
     receivedMsat: number
-    fundingMsat?: number // Internal funds allocated from master
     createdAt: number
     status: 'active'
     lastBalanceSync?: number
@@ -37,6 +35,5 @@ export type SubWallet = {
 export interface WalletConfig {
     name: string
     permissions: NWCPermission[]
-    budgetMsat?: number
     nwcUri?: string
 }
