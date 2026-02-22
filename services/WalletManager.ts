@@ -393,6 +393,19 @@ export class WalletManager {
     }
 
     /**
+     * Rename a sub-wallet
+     */
+    async renameSubWallet(id: string, newName: string): Promise<void> {
+        const wallet = this.subWallets.get(id)
+        if (!wallet) {
+            throw new Error('Sub-wallet not found')
+        }
+
+        wallet.name = newName
+        await this.saveSubWallets()
+    }
+
+    /**
      * Get a sub-wallet by ID
      */
     getWallet(id: string): SubWallet | undefined {
