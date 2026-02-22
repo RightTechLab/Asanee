@@ -1,8 +1,10 @@
 import React, { useState } from 'react'
 import { View, StyleSheet, ScrollView } from 'react-native'
-import { Modal, Portal, Text, TextInput, Button, Checkbox, Card } from 'react-native-paper'
+import { Modal, Portal, Text, TextInput, Button, Card, IconButton } from 'react-native-paper'
 import { walletManager } from '../services/WalletManager'
 import { NWCPermission, WalletConfig, SubWallet } from '../types'
+import QRScanner from './QRScanner'
+import { Scan } from 'lucide-react-native'
 
 interface CreateWalletModalProps {
     visible: boolean
@@ -32,6 +34,7 @@ export default function CreateWalletModal({
     const [budgetSats, setBudgetSats] = useState('')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
+    const [scannerVisible, setScannerVisible] = useState(false)
 
     const togglePermission = (perm: NWCPermission) => {
         const newPerms = new Set(selectedPermissions)
@@ -92,6 +95,15 @@ export default function CreateWalletModal({
         }
     }
 
+    const handleScan = (data: string) => {
+        setNwcUri(data)
+        setScannerVisible(false)
+    }
+
+    if (scannerVisible) {
+        return <QRScanner onScan={handleScan} onClose={() => setScannerVisible(false)} title="Scan NWC" />
+    }
+
     return (
         <Portal>
             <Modal
@@ -138,17 +150,24 @@ export default function CreateWalletModal({
                             />
 
                             {mode === 'import' ? (
-                                <TextInput
-                                    label="NWC URI"
-                                    value={nwcUri}
-                                    onChangeText={setNwcUri}
-                                    mode="outlined"
-                                    placeholder="nostr+walletconnect://..."
-                                    style={styles.input}
-                                    multiline
-                                    numberOfLines={3}
-                                    error={!!error && (!nwcUri || !nwcUri.startsWith('nostr+walletconnect://'))}
-                                />
+                                <View style={styles.importRow}>
+                                    <TextInput
+                                        label="NWC URI"
+                                        value={nwcUri}
+                                        onChangeText={setNwcUri}
+                                        mode="outlined"
+                                        placeholder="nostr+walletconnect://..."
+                                        style={[styles.input, styles.importInput]}
+                                        multiline
+                                        numberOfLines={3}
+                                        error={!!error && (!nwcUri || !nwcUri.startsWith('nostr+walletconnect://'))}
+                                    />
+                                    <IconButton
+                                        icon={() => <Scan size={24} color="#FFD700" />}
+                                        onPress={() => setScannerVisible(true)}
+                                        style={styles.scanButton}
+                                    />
+                                </View>
                             ) : (
                                 <>
                                     <Text variant="titleMedium" style={styles.sectionTitle}>
@@ -175,20 +194,24 @@ export default function CreateWalletModal({
                                         </Button>
                                     </View>
 
-                                    <Text variant="titleMedium" style={styles.sectionTitle}>
-                                        Budget (Optional)
-                                    </Text>
-                                    <View style={styles.budgetRow}>
-                                        <TextInput
-                                            label="Initial Balance (Sats)"
-                                            value={budgetSats}
-                                            onChangeText={setBudgetSats}
-                                            mode="outlined"
-                                            keyboardType="numeric"
-                                            placeholder="e.g., 1000"
-                                            style={styles.budgetInput}
-                                        />
-                                    </View>
+                                    {selectedPermissions.has('pay_invoice') && (
+                                        <>
+                                            <Text variant="titleMedium" style={styles.sectionTitle}>
+                                                Budget (Optional)
+                                            </Text>
+                                            <View style={styles.budgetRow}>
+                                                <TextInput
+                                                    label="Initial Balance (Sats)"
+                                                    value={budgetSats}
+                                                    onChangeText={setBudgetSats}
+                                                    mode="outlined"
+                                                    keyboardType="numeric"
+                                                    placeholder="e.g., 1000"
+                                                    style={styles.budgetInput}
+                                                />
+                                            </View>
+                                        </>
+                                    )}
                                 </>
                             )}
 
@@ -286,5 +309,18 @@ const styles = StyleSheet.create({
     },
     budgetInput: {
         flex: 1,
+    },
+    importRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    importInput: {
+        flex: 1,
+        marginBottom: 16,
+    },
+    scanButton: {
+        margin: 0,
+        marginLeft: 8,
+        marginBottom: 16,
     },
 })
