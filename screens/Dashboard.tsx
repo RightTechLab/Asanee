@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { View, StyleSheet, ScrollView, Alert, Platform } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Text, Card, IconButton, FAB, Menu } from 'react-native-paper'
+import { Text, Card, IconButton, FAB, Menu, Dialog, Portal, TextInput, Button } from 'react-native-paper'
 import { useWalletStore } from '../store/walletStore'
 import { walletManager } from '../services/WalletManager'
 import CreateWalletModal from '../components/CreateWalletModal'
@@ -15,6 +15,10 @@ export default function Dashboard() {
     const [modalVisible, setModalVisible] = useState(false)
     const insets = useSafeAreaInsets()
     const [menuVisible, setMenuVisible] = useState<string | null>(null)
+
+    const [renameDialogVisible, setRenameDialogVisible] = useState(false)
+    const [walletToRename, setWalletToRename] = useState<SubWallet | null>(null)
+    const [newWalletName, setNewWalletName] = useState('')
 
     const subWallets = useWalletStore((state) => state.subWallets)
     const setConnected = useWalletStore((state) => state.setConnected)
@@ -100,6 +104,20 @@ export default function Dashboard() {
 
     const handleCreateWallet = () => {
         setModalVisible(true)
+    }
+
+    const handleRenameSubmit = async () => {
+        if (!walletToRename || !newWalletName.trim()) return
+        try {
+            await walletManager.renameSubWallet(walletToRename.id, newWalletName.trim())
+            const wallets = walletManager.listWallets()
+            setSubWallets(wallets)
+            setRenameDialogVisible(false)
+            setWalletToRename(null)
+        } catch (error) {
+            console.error('Failed to rename wallet', error)
+            Alert.alert('Error', 'Failed to rename wallet')
+        }
     }
 
     const handleWalletCreated = (wallet: SubWallet) => {
@@ -223,6 +241,16 @@ export default function Dashboard() {
                                                 }
                                             >
                                                 <Menu.Item
+                                                    onPress={() => {
+                                                        setWalletToRename(wallet)
+                                                        setNewWalletName(wallet.name)
+                                                        setRenameDialogVisible(true)
+                                                        setMenuVisible(null)
+                                                    }}
+                                                    title="Rename"
+                                                    leadingIcon="pencil"
+                                                />
+                                                <Menu.Item
                                                     onPress={() => handleRevokeWallet(wallet)}
                                                     title="Delete"
                                                     leadingIcon="delete"
@@ -284,6 +312,26 @@ export default function Dashboard() {
                 onWalletCreated={handleWalletCreated}
             />
 
+            {/* Rename Wallet Dialog */}
+            <Portal>
+                <Dialog visible={renameDialogVisible} onDismiss={() => setRenameDialogVisible(false)} style={styles.dialog}>
+                    <Dialog.Title style={styles.dialogTitle}>Rename Sub-Wallet</Dialog.Title>
+                    <Dialog.Content>
+                        <TextInput
+                            label="Wallet Name"
+                            value={newWalletName}
+                            onChangeText={setNewWalletName}
+                            mode="outlined"
+                            style={styles.renameInput}
+                            autoFocus
+                        />
+                    </Dialog.Content>
+                    <Dialog.Actions>
+                        <Button onPress={() => setRenameDialogVisible(false)} textColor="#888">Cancel</Button>
+                        <Button onPress={handleRenameSubmit} textColor="#FFD700">Save</Button>
+                    </Dialog.Actions>
+                </Dialog>
+            </Portal>
 
         </View>
     )
@@ -440,5 +488,14 @@ const styles = StyleSheet.create({
         right: 0,
         bottom: 0,
         backgroundColor: '#FFD700',
+    },
+    dialog: {
+        backgroundColor: '#141414',
+    },
+    dialogTitle: {
+        color: '#FFD700',
+    },
+    renameInput: {
+        backgroundColor: '#141414',
     },
 })
