@@ -188,7 +188,7 @@ export default function Dashboard() {
                                 <Card.Title
                                     title={wallet.name}
                                     titleStyle={styles.walletTitle}
-                                    subtitle={wallet.permissions.length > 3 ? 'Full access' : 'Receive only'}
+                                    subtitle={wallet.permissions.length > 4 ? 'Full access' : 'Receive only'}
                                     subtitleStyle={styles.walletSubtitle}
                                     right={() => (
                                         <View style={styles.walletRight}>
