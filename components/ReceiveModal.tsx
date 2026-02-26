@@ -2,8 +2,10 @@ import React, { useState } from 'react'
 import { View, StyleSheet, Share, Pressable, Platform, Modal, ScrollView, KeyboardAvoidingView } from 'react-native'
 import { Text, TextInput, ActivityIndicator } from 'react-native-paper'
 import QRCode from 'react-native-qrcode-svg'
+import { Copy, Share2, ArrowDownLeft, CheckCircle, RotateCcw, X } from 'lucide-react-native'
 import { walletManager } from '../services/WalletManager'
-import { ArrowDownLeft, Copy, Share2, X, RotateCcw, CheckCircle } from 'lucide-react-native'
+import { useBtcPrice } from '../hooks/useBtcPrice'
+import { satsToThb, formatThb } from '../services/PriceService'
 import * as Clipboard from 'expo-clipboard'
 import { Colors, Spacing, Radius } from '../theme'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -21,6 +23,7 @@ export default function ReceiveModal({ visible, onDismiss, walletName, walletId 
     const [invoice, setInvoice] = useState<string | null>(null)
     const [loading, setLoading] = useState(false)
     const [copied, setCopied] = useState(false)
+    const btcPrice = useBtcPrice()
     const insets = useSafeAreaInsets()
 
     const handleGenerate = async () => {
@@ -89,6 +92,11 @@ export default function ReceiveModal({ visible, onDismiss, walletName, walletId 
                                         </Text>
                                         <Text style={styles.amountUnit}>sats</Text>
                                     </View>
+                                    {amount && btcPrice && (
+                                        <Text style={styles.fiatAmount}>
+                                            ≈ {formatThb(satsToThb(Number.parseInt(amount), btcPrice))}
+                                        </Text>
+                                    )}
 
                                     <TextInput
                                         value={amount}
@@ -141,6 +149,11 @@ export default function ReceiveModal({ visible, onDismiss, walletName, walletId 
                                         <Text style={styles.amountPillText}>
                                             {Number.parseInt(amount).toLocaleString()} sats
                                         </Text>
+                                        {btcPrice && (
+                                            <Text style={styles.amountPillFiat}>
+                                                ≈ {formatThb(satsToThb(Number.parseInt(amount), btcPrice))}
+                                            </Text>
+                                        )}
                                     </View>
 
                                     {/* QR Code */}
@@ -271,6 +284,12 @@ const styles = StyleSheet.create({
         fontWeight: '500',
         marginTop: Spacing.xs,
     },
+    fiatAmount: {
+        color: Colors.textSecondary,
+        fontSize: 16,
+        textAlign: 'center',
+        marginTop: -Spacing.xs,
+    },
 
     // Form
     input: {
@@ -313,6 +332,11 @@ const styles = StyleSheet.create({
         color: Colors.accent,
         fontSize: 14,
         fontWeight: '600',
+    },
+    amountPillFiat: {
+        color: Colors.textSecondary,
+        fontSize: 12,
+        marginLeft: Spacing.xs,
     },
     qrOuter: {
         padding: 4,

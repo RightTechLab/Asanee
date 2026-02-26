@@ -3,6 +3,8 @@ import { View, StyleSheet, Platform, Pressable, Alert, Modal, ScrollView, Keyboa
 import { Text, TextInput, ActivityIndicator } from 'react-native-paper'
 import { walletManager } from '../services/WalletManager'
 import { useWalletStore } from '../store/walletStore'
+import { useBtcPrice } from '../hooks/useBtcPrice'
+import { satsToThb, formatThb } from '../services/PriceService'
 import QRScanner from './QRScanner'
 import { Scan, X, ArrowUpRight, Zap, CheckCircle } from 'lucide-react-native'
 import { Colors, Spacing, Radius } from '../theme'
@@ -27,6 +29,7 @@ export default function SendModal({ visible, onDismiss, initialInvoice = '', onP
     const [scannerVisible, setScannerVisible] = useState(false)
     const [success, setSuccess] = useState(false)
     const insets = useSafeAreaInsets()
+    const btcPrice = useBtcPrice()
 
     // Determine which wallet to pay from
     const effectiveWalletId = walletId || useWalletStore.getState().selectedWalletId || undefined
@@ -175,6 +178,11 @@ export default function SendModal({ visible, onDismiss, initialInvoice = '', onP
                                                 dense
                                                 right={<TextInput.Affix text="sats" textStyle={{ color: Colors.textSecondary }} />}
                                             />
+                                            {amountSats && btcPrice && (
+                                                <Text style={styles.fiatAmount}>
+                                                    ≈ {formatThb(satsToThb(Number.parseInt(amountSats), btcPrice))}
+                                                </Text>
+                                            )}
                                         </>
                                     )}
 
@@ -329,6 +337,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         marginTop: 2,
+    },
+    fiatAmount: {
+        color: Colors.textSecondary,
+        fontSize: 14,
+        marginTop: Spacing.xs,
+        marginLeft: Spacing.xs,
     },
 
     // Status

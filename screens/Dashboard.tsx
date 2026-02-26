@@ -4,6 +4,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Text, Menu, Dialog, Portal, TextInput, Button } from 'react-native-paper'
 import { useWalletStore } from '../store/walletStore'
 import { walletManager } from '../services/WalletManager'
+import { useBtcPrice } from '../hooks/useBtcPrice'
+import { msatToThb, formatThb } from '../services/PriceService'
 import CreateWalletModal from '../components/CreateWalletModal'
 import QRScanner from '../components/QRScanner'
 import type { SubWallet, SavedWallet } from '../types'
@@ -34,6 +36,7 @@ export default function Dashboard() {
     const setTotalBalance = useWalletStore((state) => state.setTotalBalance)
     const isBalanceVisible = useWalletStore((state) => state.isBalanceVisible)
     const setBalanceVisible = useWalletStore((state) => state.setBalanceVisible)
+    const btcPrice = useBtcPrice()
 
     const [loading, setLoading] = useState(false)
     const [walletBalances, setWalletBalances] = useState<Record<string, number | null>>({})
@@ -316,6 +319,9 @@ export default function Dashboard() {
                         {isBalanceVisible ? formatBalance(totalBalance) : '•••••'}
                         <Text style={styles.balanceSats}> sats</Text>
                     </Text>
+                    {isBalanceVisible && totalBalance !== null && btcPrice && (
+                        <Text style={styles.fiatBalance}>≈ {formatThb(msatToThb(totalBalance, btcPrice))}</Text>
+                    )}
                 </View>
 
                 {/* Section header */}
@@ -348,6 +354,9 @@ export default function Dashboard() {
                                             {isBalanceVisible ? formatBalance(walletBalances[wallet.id]) : '•••••'}
                                             <Text style={styles.walletBalanceSats}> sats</Text>
                                         </Text>
+                                        {isBalanceVisible && walletBalances[wallet.id] != null && btcPrice && (
+                                            <Text style={styles.walletFiat}>≈ {formatThb(msatToThb(walletBalances[wallet.id] as number, btcPrice))}</Text>
+                                        )}
                                         <View style={styles.walletActions}>
                                             <Pressable
                                                 onPress={(e) => {
@@ -705,6 +714,12 @@ const styles = StyleSheet.create({
         fontWeight: '400',
         color: Colors.accent,
     },
+    fiatBalance: {
+        color: Colors.textSecondary,
+        fontSize: 16,
+        fontWeight: '400',
+        marginTop: Spacing.xs,
+    },
 
     // Section
     sectionHeader: {
@@ -768,6 +783,12 @@ const styles = StyleSheet.create({
         color: Colors.textSecondary,
         fontSize: 12,
         fontWeight: '400',
+    },
+    walletFiat: {
+        color: Colors.textTertiary,
+        fontSize: 12,
+        fontWeight: '400',
+        marginTop: 2,
     },
     walletActions: {
         flexDirection: 'row',

@@ -3,6 +3,8 @@ import { View, StyleSheet, ScrollView, Pressable } from 'react-native'
 import { Text, IconButton, ActivityIndicator } from 'react-native-paper'
 import { useWalletStore } from '../store/walletStore'
 import { walletManager } from '../services/WalletManager'
+import { useBtcPrice } from '../hooks/useBtcPrice'
+import { satsToThb, msatToThb, formatThb } from '../services/PriceService'
 import type { Transaction } from '../types'
 import ReceiveModal from '../components/ReceiveModal'
 import SendModal from '../components/SendModal'
@@ -30,6 +32,7 @@ export default function SubWalletScreen() {
     const [infoVisible, setInfoVisible] = useState(false)
     const isBalanceVisible = useWalletStore((state) => state.isBalanceVisible)
     const setBalanceVisible = useWalletStore((state) => state.setBalanceVisible)
+    const btcPrice = useBtcPrice()
 
     const wallet = subWallets.find(w => w.id === selectedWalletId)
 
@@ -191,6 +194,9 @@ export default function SubWalletScreen() {
                                     : '•••••'}
                                 <Text style={styles.balanceSats}> {balance !== null && Math.abs(Math.floor(balance / 1000)) === 1 ? 'sat' : 'sats'}</Text>
                             </Text>
+                            {isBalanceVisible && balance !== null && btcPrice && (
+                                <Text style={styles.balanceFiat}>≈ {formatThb(msatToThb(balance, btcPrice))}</Text>
+                            )}
                             <Text style={styles.balanceMeta}>
                                 {isBalanceVisible
                                     ? `${Math.floor(wallet.receivedMsat / 1000).toLocaleString()} received · ${Math.floor(wallet.spentMsat / 1000).toLocaleString()} spent`
@@ -253,9 +259,11 @@ export default function SubWalletScreen() {
                             </View>
                             <View style={styles.txAmountWrap}>
                                 <Text style={[styles.txAmount, { color: tx.type === 'incoming' ? Colors.success : Colors.danger }]}>
-                                    {tx.type === 'incoming' ? '+' : '-'}{Math.floor(tx.amountMsat / 1000).toLocaleString()}
+                                    {tx.type === 'incoming' ? '+' : '-'}{Math.floor(tx.amountMsat / 1000).toLocaleString()} <Text style={styles.txSats}>sats</Text>
                                 </Text>
-                                <Text style={styles.txSats}>sats</Text>
+                                {btcPrice && (
+                                    <Text style={styles.txFiat}>≈ {formatThb(satsToThb(Math.floor(tx.amountMsat / 1000), btcPrice))}</Text>
+                                )}
                             </View>
                         </View>
                     ))
@@ -322,6 +330,13 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '400',
         color: Colors.accent,
+    },
+    balanceFiat: {
+        color: Colors.textSecondary,
+        fontSize: 16,
+        fontWeight: '400',
+        marginTop: Spacing.xs,
+        marginBottom: Spacing.xs,
     },
     balanceMeta: {
         color: Colors.textSecondary,
@@ -415,6 +430,11 @@ const styles = StyleSheet.create({
     txSats: {
         color: Colors.textTertiary,
         fontSize: 10,
+    },
+    txFiat: {
+        color: Colors.textTertiary,
+        fontSize: 11,
+        marginTop: 2,
     },
     emptyText: {
         color: Colors.textTertiary,
