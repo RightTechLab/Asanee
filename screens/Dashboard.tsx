@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { View, StyleSheet, ScrollView, Alert, Platform, Pressable, Modal as RNModal } from 'react-native'
+import { View, StyleSheet, ScrollView, Alert, Platform, Pressable, Modal as RNModal, KeyboardAvoidingView, ActivityIndicator } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Text, Menu, Dialog, Portal, TextInput, Button } from 'react-native-paper'
 import { useWalletStore } from '../store/walletStore'
@@ -49,6 +49,7 @@ export default function Dashboard() {
     const [masterNameEditing, setMasterNameEditing] = useState(false)
     const [masterNameInput, setMasterNameInput] = useState('')
     const [switcherScannerVisible, setSwitcherScannerVisible] = useState(false)
+    const [switchingWallet, setSwitchingWallet] = useState(false)
 
     const activeWallets = subWallets
 
@@ -104,37 +105,41 @@ export default function Dashboard() {
 
     const handleSwitchWallet = async (wallet: SavedWallet) => {
         setSwitcherVisible(false)
-        // Disconnect current, connect to new
-        await walletManager.disconnect()
+        setSwitchingWallet(true)
         try {
+            await walletManager.disconnect()
             await walletManager.connect(wallet.nwcUri)
             const wallets = walletManager.listWallets()
             setSubWallets(wallets)
             setCurrentWalletName(wallet.name || null)
-            refreshTotalBalance()
+            await refreshTotalBalance()
         } catch (err) {
             Alert.alert('Error', err instanceof Error ? err.message : 'Failed to connect')
             setConnected(false)
             setSubWallets([])
+        } finally {
+            setSwitchingWallet(false)
         }
     }
 
     const handleSwitcherScan = async (data: string) => {
         setSwitcherScannerVisible(false)
         setSwitcherVisible(false)
-        // Disconnect current, connect to scanned
-        await walletManager.disconnect()
+        setSwitchingWallet(true)
         try {
+            await walletManager.disconnect()
             await walletManager.connect(data)
             const wallets = walletManager.listWallets()
             setSubWallets(wallets)
             const name = await walletManager.getCurrentWalletName()
             setCurrentWalletName(name)
-            refreshTotalBalance()
+            await refreshTotalBalance()
         } catch (err) {
             Alert.alert('Error', err instanceof Error ? err.message : 'Failed to connect')
             setConnected(false)
             setSubWallets([])
+        } finally {
+            setSwitchingWallet(false)
         }
     }
 
@@ -438,6 +443,7 @@ export default function Dashboard() {
                 onRequestClose={() => setSwitcherVisible(false)}
             >
                 <Pressable style={styles.switcherOverlay} onPress={() => setSwitcherVisible(false)}>
+                  <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%' }}>
                     <Pressable style={styles.switcherSheet} onPress={(e) => e.stopPropagation()}>
                         <View style={styles.switcherHandle} />
                         <Text style={styles.switcherTitle}>Switch Wallet</Text>
@@ -517,8 +523,20 @@ export default function Dashboard() {
                             <Text style={styles.switcherScanText}>Scan to add new wallet</Text>
                         </Pressable>
                     </Pressable>
+                  </KeyboardAvoidingView>
                 </Pressable>
             </RNModal>
+
+            {/* ═══ Switching Wallet Loading Overlay ═══ */}
+            {switchingWallet && (
+                <View style={styles.loadingOverlay}>
+                    <View style={styles.loadingContent}>
+                        <Zap size={40} color={Colors.accent} />
+                        <Text style={styles.loadingTitle}>Connecting...</Text>
+                        <ActivityIndicator size="small" color={Colors.accent} style={{ marginTop: Spacing.md }} />
+                    </View>
+                </View>
+            )}
 
             {/* Create Wallet Modal */}
             <CreateWalletModal
@@ -955,5 +973,23 @@ const styles = StyleSheet.create({
         color: Colors.textSecondary,
         fontSize: 14,
         marginBottom: Spacing.md,
+    },
+
+    // Loading overlay
+    loadingOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.85)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 999,
+    },
+    loadingContent: {
+        alignItems: 'center',
+    },
+    loadingTitle: {
+        color: Colors.text,
+        fontSize: 18,
+        fontWeight: '500',
+        marginTop: Spacing.md,
     },
 })

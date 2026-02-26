@@ -78,9 +78,20 @@ export default function SubWalletScreen() {
                 const txIds = activeWallet?.txIds || []
                 const subWalletTxs = isVirtual ? allTxs.filter(tx => txIds.includes(tx.id)) : allTxs
 
+                // Merge internal transactions (top-ups, etc.)
+                const internalTxs: Transaction[] = (activeWallet?.internalTxs || []).map(t => ({
+                    id: t.id,
+                    type: t.type,
+                    amountMsat: t.amountMsat,
+                    description: t.description,
+                    timestamp: t.timestamp,
+                    status: 'completed' as const,
+                }))
+                const mergedTxs = [...subWalletTxs, ...internalTxs].sort((a, b) => b.timestamp - a.timestamp)
+
                 let totalSpent = 0
                 let totalReceived = 0
-                subWalletTxs.forEach(t => {
+                mergedTxs.forEach(t => {
                     if (t.type === 'outgoing') totalSpent += t.amountMsat
                     else totalReceived += t.amountMsat
                 })
@@ -91,7 +102,7 @@ export default function SubWalletScreen() {
                     if (synced) updateSubWallet(synced.id, synced)
                 }
 
-                setActiveTransactions(subWalletTxs)
+                setActiveTransactions(mergedTxs)
                 setBalance(await walletManager.getWalletBalance(selectedWalletId))
             } catch (e) {
                 setActiveTransactions([])
@@ -254,7 +265,7 @@ export default function SubWalletScreen() {
             </ScrollView>
 
             <ReceiveModal visible={receiveVisible} onDismiss={() => setReceiveVisible(false)} walletName={wallet.name} walletId={wallet.id} />
-            <SendModal visible={sendVisible} onDismiss={() => setSendVisible(false)} initialInvoice={scannedInvoice} onPaymentSuccess={refreshWalletData} />
+            <SendModal visible={sendVisible} onDismiss={() => setSendVisible(false)} initialInvoice={scannedInvoice} onPaymentSuccess={refreshWalletData} walletId={selectedWalletId || undefined} />
             <WalletInfoModal visible={infoVisible} onDismiss={() => setInfoVisible(false)} walletName={wallet.name} nwcUri={wallet.nwcUri} />
         </View>
     )

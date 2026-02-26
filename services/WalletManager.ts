@@ -744,10 +744,31 @@ export class WalletManager {
         // Ensure master client exists
         if (!this.nwcClient) throw new Error('Master NWC not connected')
 
-        // Get the sub-client to generate the invoice
+        const isVirtual = !!wallet.serviceSecretKey
+
+        if (isVirtual) {
+            // ─── Virtual wallet: pure accounting + internal tx record ───
+            // Virtual sub-wallets share the master NWC node, so we can't do a
+            // real self-payment. Instead credit receivedMsat and record a synthetic tx.
+            wallet.receivedMsat = (wallet.receivedMsat || 0) + amountMsat
+
+            if (!wallet.internalTxs) wallet.internalTxs = []
+            wallet.internalTxs.push({
+                id: `topup_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+                type: 'incoming',
+                amountMsat,
+                description: `Top-Up from Master`,
+                timestamp: Date.now(),
+            })
+
+            await this.saveSubWallets()
+            return
+        }
+
+        // ─── Imported wallet: real Lightning transaction ───
         const subClient = this.getClientForWallet(id)
         if (!subClient || subClient === this.nwcClient) {
-             throw new Error('Cannot generate real transaction for virtual proxy wallet without dedicated NWC connection')
+             throw new Error('Cannot top up: wallet has no dedicated NWC connection')
         }
 
         // Create an invoice from the sub-wallet
@@ -777,7 +798,7 @@ export class WalletManager {
             amount: amountMsat,
         })
         
-        // Update local tracking. Since it's a real transaction, it adds to receivedMsat
+        // Update local tracking
         wallet.receivedMsat = (wallet.receivedMsat || 0) + amountMsat
         await this.saveSubWallets()
     }
