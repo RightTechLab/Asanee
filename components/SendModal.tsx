@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react'
-import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native'
-import { Modal, Portal, Text, TextInput, Button, IconButton, ActivityIndicator } from 'react-native-paper'
+import { View, StyleSheet, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard, Pressable, Alert } from 'react-native'
+import { Modal, Portal, Text, TextInput, Button, ActivityIndicator } from 'react-native-paper'
 import { walletManager } from '../services/WalletManager'
 import { useWalletStore } from '../store/walletStore'
 import QRScanner from './QRScanner'
-import { Scan } from 'lucide-react-native'
+import { Scan, X } from 'lucide-react-native'
+import { Colors, Spacing, Radius } from '../theme'
 
 interface SendModalProps {
     visible: boolean
@@ -23,125 +24,78 @@ export default function SendModal({ visible, onDismiss, initialInvoice = '', onP
     const [isLNAddress, setIsLNAddress] = useState(false)
     const [scannerVisible, setScannerVisible] = useState(false)
 
-    // Auto-update if initialInvoice changes
-    useEffect(() => {
-        if (initialInvoice) {
-            setInvoice(initialInvoice)
-        }
-    }, [initialInvoice])
+    useEffect(() => { if (initialInvoice) setInvoice(initialInvoice) }, [initialInvoice])
 
     useEffect(() => {
         const selectedId = useWalletStore.getState().selectedWalletId
-        if (visible && selectedId) {
-            walletManager.getWalletBalance(selectedId).then(setBalance)
-        }
+        if (visible && selectedId) walletManager.getWalletBalance(selectedId).then(setBalance)
     }, [visible])
 
-    // Detect LN Address
     useEffect(() => {
-        const lowerInvoice = invoice.toLowerCase().trim()
-        setIsLNAddress(
-            lowerInvoice.includes('@') &&
-            !lowerInvoice.startsWith('lnbc') &&
-            !lowerInvoice.startsWith('lightning:')
-        )
+        const lower = invoice.toLowerCase().trim()
+        setIsLNAddress(lower.includes('@') && !lower.startsWith('lnbc') && !lower.startsWith('lightning:'))
     }, [invoice])
 
     const selectedWalletId = useWalletStore.getState().selectedWalletId
 
     const handlePay = async () => {
         if (!invoice.trim()) return
-
-        setLoading(true)
-        setError('')
-
+        setLoading(true); setError('')
         try {
             let finalInvoice = invoice.trim()
-            let finalAmountMsat: number | undefined = undefined
+            let finalAmountMsat: number | undefined
 
-            // Check balance first
-            if (balance !== null) {
-                // If it's a LN address, we know the amount early
-                if (isLNAddress && amountSats) {
-                    const reqSats = parseInt(amountSats)
-                    if (reqSats * 1000 > balance) {
-                        throw new Error(`Insufficient funds. This sub-wallet only has ${(balance / 1000).toLocaleString()} sats.`)
-                    }
-                }
+            if (balance !== null && isLNAddress && amountSats) {
+                const reqSats = Number.parseInt(amountSats)
+                if (reqSats * 1000 > balance) throw new Error(`Insufficient funds. Only ${(balance / 1000).toLocaleString()} sats available.`)
             }
 
             if (isLNAddress) {
-                if (!amountSats) {
-                    throw new Error('Please enter an amount for the Lightning Address')
-                }
-
-                const amountMsat = parseInt(amountSats) * 1000
+                if (!amountSats) throw new Error('Please enter an amount')
+                const amountMsat = Number.parseInt(amountSats) * 1000
                 setResolving(true)
-
-                // Resolve LN Address to metadata
                 const metadata = await walletManager.resolveLightningAddress(finalInvoice)
-
-                // Fetch BOLT11 invoice from provider
                 finalInvoice = await walletManager.getInvoiceFromLNURL(metadata.callback, amountMsat)
                 finalAmountMsat = amountMsat
-
                 setResolving(false)
             }
 
             await walletManager.payInvoice(finalInvoice, finalAmountMsat, selectedWalletId || undefined)
-            Alert.alert('Success', 'Payment sent successfully!')
+            Alert.alert('Success', 'Payment sent!')
             onPaymentSuccess()
             reset()
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Payment failed. Please check the destination and your balance.')
+            setError(err instanceof Error ? err.message : 'Payment failed')
         } finally {
-            setLoading(false)
-            setResolving(false)
+            setLoading(false); setResolving(false)
         }
     }
 
-    const handleScan = (data: string) => {
-        setInvoice(data)
-        setScannerVisible(false)
-    }
+    const handleScan = (data: string) => { setInvoice(data); setScannerVisible(false) }
+    const reset = () => { setInvoice(''); setAmountSats(''); setError(''); onDismiss() }
 
-    const reset = () => {
-        setInvoice('')
-        setAmountSats('')
-        setError('')
-        onDismiss()
-    }
-
-    if (scannerVisible) {
-        return <QRScanner onScan={handleScan} onClose={() => setScannerVisible(false)} />
-    }
+    if (scannerVisible) return <QRScanner onScan={handleScan} onClose={() => setScannerVisible(false)} />
 
     return (
         <Portal>
-            <Modal
-                visible={visible}
-                onDismiss={reset}
-                contentContainerStyle={styles.container}
-            >
-                <KeyboardAvoidingView
-                    behavior={Platform.OS === "ios" ? "padding" : "height"}
-                    keyboardVerticalOffset={Platform.OS === "ios" ? 40 : 0}
-                >
+            <Modal visible={visible} onDismiss={reset} contentContainerStyle={styles.container}>
+                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}>
                     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
                         <View style={styles.content}>
                             <View style={styles.header}>
-                                <Text variant="headlineSmall" style={styles.title}>Send Payment</Text>
+                                <Text style={styles.title}>Send</Text>
                                 <View style={styles.headerActions}>
-                                    <IconButton
-                                        icon={() => <Scan size={20} color="#FFD700" />}
-                                        onPress={() => setScannerVisible(true)}
-                                    />
-                                    <IconButton icon="close" iconColor="#888" onPress={reset} />
+                                    <Pressable onPress={() => setScannerVisible(true)} hitSlop={8}>
+                                        <Scan size={18} color={Colors.accent} />
+                                    </Pressable>
+                                    <Pressable onPress={reset} hitSlop={8}>
+                                        <X size={18} color={Colors.textSecondary} />
+                                    </Pressable>
                                 </View>
                             </View>
 
                             <TextInput
-                                label="LN Invoice or LN Address"
+                                label="LN Invoice or Address"
                                 value={invoice}
                                 onChangeText={setInvoice}
                                 mode="outlined"
@@ -149,17 +103,16 @@ export default function SendModal({ visible, onDismiss, initialInvoice = '', onP
                                 numberOfLines={isLNAddress ? 1 : 3}
                                 style={styles.input}
                                 placeholder="lnbc... or user@domain.com"
+                                outlineColor={Colors.surfaceBorder}
+                                activeOutlineColor={Colors.accent}
                                 error={!!error}
                                 autoCapitalize="none"
                                 autoCorrect={false}
                             />
 
                             {balance !== null && (
-                                <Text style={styles.balanceHint}>
-                                    Available: {(balance / 1000).toLocaleString()} sats
-                                </Text>
+                                <Text style={styles.balanceHint}>Available: {(balance / 1000).toLocaleString()} sats</Text>
                             )}
-
 
                             {isLNAddress && (
                                 <TextInput
@@ -169,32 +122,30 @@ export default function SendModal({ visible, onDismiss, initialInvoice = '', onP
                                     mode="outlined"
                                     keyboardType="numeric"
                                     style={styles.input}
+                                    outlineColor={Colors.surfaceBorder}
+                                    activeOutlineColor={Colors.accent}
                                     placeholder="1000"
                                 />
                             )}
 
                             {resolving && (
                                 <View style={styles.statusRow}>
-                                    <ActivityIndicator size="small" color="#FFD700" />
+                                    <ActivityIndicator size="small" color={Colors.accent} />
                                     <Text style={styles.statusText}>Resolving address...</Text>
                                 </View>
                             )}
 
-                            {error ? (
-                                <Text style={styles.errorText}>{error}</Text>
-                            ) : null}
+                            {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-                            <Button
-                                mode="contained"
+                            <Pressable
+                                style={[styles.payButton, (!invoice || loading || resolving) && { opacity: 0.5 }]}
                                 onPress={handlePay}
-                                loading={loading}
                                 disabled={!invoice || loading || resolving}
-                                style={styles.button}
-                                buttonColor="#FFD700"
-                                textColor="#000"
                             >
-                                {isLNAddress ? 'Pay Address' : 'Pay Invoice'}
-                            </Button>
+                                <Text style={styles.payText}>
+                                    {loading ? 'Paying...' : isLNAddress ? 'Pay Address' : 'Pay Invoice'}
+                                </Text>
+                            </Pressable>
                         </View>
                     </TouchableWithoutFeedback>
                 </KeyboardAvoidingView>
@@ -204,58 +155,65 @@ export default function SendModal({ visible, onDismiss, initialInvoice = '', onP
 }
 
 const styles = StyleSheet.create({
-    container: {
-        margin: 20,
-    },
+    container: { margin: Spacing.lg },
     content: {
-        backgroundColor: '#141414',
-        padding: 20,
-        borderRadius: 20,
+        backgroundColor: Colors.surfaceElevated,
+        padding: Spacing.lg,
+        borderRadius: Radius.lg,
         borderWidth: 1,
-        borderColor: '#333',
+        borderColor: Colors.surfaceBorder,
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 16,
+        marginBottom: Spacing.md,
     },
     headerActions: {
         flexDirection: 'row',
         alignItems: 'center',
+        gap: Spacing.md,
     },
     title: {
-        color: '#FFD700',
-        fontWeight: 'bold',
+        color: Colors.text,
+        fontSize: 18,
+        fontWeight: '600',
     },
     input: {
-        marginBottom: 12,
-    },
-    errorText: {
-        color: '#F44336',
-        marginTop: 4,
-        marginBottom: 16,
-        fontSize: 14,
+        marginBottom: Spacing.sm,
+        backgroundColor: Colors.surfaceElevated,
     },
     balanceHint: {
-        color: '#888',
+        color: Colors.textSecondary,
         fontSize: 12,
-        marginBottom: 12,
+        marginBottom: Spacing.sm,
         textAlign: 'right',
     },
-
-    button: {
-        marginTop: 8,
-        paddingVertical: 4,
+    errorText: {
+        color: Colors.danger,
+        fontSize: 13,
+        marginBottom: Spacing.md,
     },
     statusRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 12,
-        gap: 8,
+        marginBottom: Spacing.sm,
+        gap: Spacing.sm,
     },
     statusText: {
-        color: '#FFD700',
-        fontSize: 14,
+        color: Colors.accent,
+        fontSize: 13,
+    },
+    payButton: {
+        backgroundColor: Colors.accent,
+        borderRadius: Radius.md,
+        paddingVertical: 16,
+        alignItems: 'center',
+        marginTop: Spacing.sm,
+    },
+    payText: {
+        color: Colors.accentText,
+        fontSize: 16,
+        fontWeight: '600',
     },
 })

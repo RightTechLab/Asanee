@@ -1,26 +1,60 @@
 import { MD3DarkTheme } from 'react-native-paper'
 
 /**
- * Electric Wasp Theme - Netflix-style Yellow & Black
+ * Asanee Design System — Minimal Premium Black/Gold
  */
+
+// ─── Design Tokens ──────────────────────────────────────────────
+export const Colors = {
+    bg: '#000000',
+    surface: '#0A0A0A',
+    surfaceElevated: '#111111',
+    surfaceBorder: '#1A1A1A',
+    accent: '#F7B731',
+    accentDim: 'rgba(247,183,49,0.12)',
+    accentText: '#000000',
+    text: '#F5F5F5',
+    textSecondary: '#6B6B6B',
+    textTertiary: '#3A3A3A',
+    success: '#34D399',
+    danger: '#EF4444',
+}
+
+export const Spacing = {
+    xs: 4,
+    sm: 8,
+    md: 16,
+    lg: 24,
+    xl: 32,
+    xxl: 48,
+}
+
+export const Radius = {
+    sm: 8,
+    md: 14,
+    lg: 20,
+    full: 999,
+}
+
+// ─── React Native Paper Theme ───────────────────────────────────
 export const ElectricWaspTheme = {
     ...MD3DarkTheme,
     colors: {
         ...MD3DarkTheme.colors,
-        primary: '#FFD700', // Electric Yellow
-        primaryContainer: '#333300',
-        secondary: '#F5C518', // Golden Yellow
-        secondaryContainer: '#3d3300',
-        background: '#000000', // Pure Black
-        surface: '#141414', // Netflix Dark Gray
-        surfaceVariant: '#1f1f1f',
-        error: '#CF6679',
-        onPrimary: '#000000', // Black text on yellow
-        onSecondary: '#000000',
-        onBackground: '#FFFFFF', // White text on black
-        onSurface: '#FFFFFF',
-        onSurfaceVariant: '#E0E0E0',
-        outline: '#FFD700',
+        primary: Colors.accent,
+        primaryContainer: '#2A2000',
+        secondary: '#E5A825',
+        secondaryContainer: '#2A2000',
+        background: Colors.bg,
+        surface: Colors.surface,
+        surfaceVariant: Colors.surfaceElevated,
+        error: '#EF4444',
+        onPrimary: Colors.accentText,
+        onSecondary: Colors.accentText,
+        onBackground: Colors.text,
+        onSurface: Colors.text,
+        onSurfaceVariant: '#CCCCCC',
+        outline: Colors.surfaceBorder,
     },
-    roundness: 8,
+    roundness: Radius.md,
 }

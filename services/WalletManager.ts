@@ -3,8 +3,11 @@ import { NWCWalletService, NWCWalletServiceKeyPair } from "@getalby/sdk/nwc"
 import { generateSecretKey, getPublicKey } from "nostr-tools"
 import { bytesToHex, hexToBytes } from "nostr-tools/utils"
 import { sha256 } from '@noble/hashes/sha2.js'
-import { SubWallet, WalletConfig } from '../types'
+import { SubWallet, WalletConfig, SavedWallet } from '../types'
 import { StorageService } from './StorageService'
+
+const MAX_SAVED_WALLETS = 3
+const SAVED_WALLETS_KEY = 'saved_wallets'
 
 /**
  * Wallet Manager - manages Master NWC connection and sub-wallets
@@ -40,8 +43,11 @@ export class WalletManager {
             // Initialize NWC Wallet Service for sub-wallets
             this.walletService = new NWCWalletService({ relayUrl: this.relayUrl })
 
-            // Save to secure storage
+            // Save to secure storage (for auto-reconnect on app restart)
             await StorageService.save('master_nwc_uri', masterUri)
+
+            // Auto-save to saved wallets list
+            await this.saveWalletToList()
 
             // Manage Master-NWC rotation (Keep Max 2)
             if (this.activePubkey) {
@@ -102,7 +108,101 @@ export class WalletManager {
         this.subWallets.clear()
         this.subClients.clear()
 
+        // Remove auto-reconnect key but keep saved wallets list
         await StorageService.delete('master_nwc_uri')
+    }
+
+    // ─── Saved Wallets Management (Max 3) ────────────────────────────
+
+    /**
+     * Save current connected wallet to the persistent saved wallets list.
+     * If wallet already exists (by pubkey), updates lastUsed.
+     * Enforces MAX_SAVED_WALLETS limit by removing oldest.
+     */
+    async saveWalletToList(name?: string): Promise<void> {
+        if (!this.masterNWCUri) return
+
+        const pubkey = this.activePubkey
+        let saved = await this.getSavedWallets()
+
+        const existing = saved.findIndex(w => w.pubkey === pubkey)
+
+        if (existing >= 0) {
+            // Update existing entry
+            saved[existing].lastUsed = Date.now()
+            saved[existing].nwcUri = this.masterNWCUri
+            if (name) saved[existing].name = name
+        } else {
+            // Add new entry
+            const newWallet: SavedWallet = {
+                id: pubkey || `wallet_${Date.now()}`,
+                name: name || '',
+                nwcUri: this.masterNWCUri,
+                pubkey,
+                lastUsed: Date.now(),
+            }
+            saved.unshift(newWallet)
+        }
+
+        // Sort by lastUsed (newest first) and enforce max limit
+        saved.sort((a, b) => b.lastUsed - a.lastUsed)
+        if (saved.length > MAX_SAVED_WALLETS) {
+            saved = saved.slice(0, MAX_SAVED_WALLETS)
+        }
+
+        await StorageService.save(SAVED_WALLETS_KEY, saved)
+    }
+
+    /**
+     * Get all saved wallets from storage
+     */
+    async getSavedWallets(): Promise<SavedWallet[]> {
+        const saved = await StorageService.load<SavedWallet[]>(SAVED_WALLETS_KEY)
+        return saved || []
+    }
+
+    /**
+     * Remove a saved wallet by id
+     */
+    async removeSavedWallet(id: string): Promise<void> {
+        let saved = await this.getSavedWallets()
+        saved = saved.filter(w => w.id !== id)
+        await StorageService.save(SAVED_WALLETS_KEY, saved)
+
+        // Also clean up sub-wallets data for this wallet
+        const wallet = saved.find(w => w.id === id)
+        if (wallet?.pubkey) {
+            await StorageService.delete(`sub_wallets_${wallet.pubkey}`)
+        }
+    }
+
+    /**
+     * Rename a saved wallet
+     */
+    async renameSavedWallet(id: string, newName: string): Promise<void> {
+        const saved = await this.getSavedWallets()
+        const wallet = saved.find(w => w.id === id)
+        if (wallet) {
+            wallet.name = newName
+            await StorageService.save(SAVED_WALLETS_KEY, saved)
+        }
+    }
+
+    /**
+     * Get the name of the currently connected wallet from saved list
+     */
+    async getCurrentWalletName(): Promise<string | null> {
+        if (!this.activePubkey) return null
+        const saved = await this.getSavedWallets()
+        const wallet = saved.find(w => w.pubkey === this.activePubkey)
+        return wallet?.name || null
+    }
+
+    /**
+     * Get the active master wallet pubkey
+     */
+    getActivePubkey(): string | null {
+        return this.activePubkey
     }
 
     /**

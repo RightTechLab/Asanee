@@ -1,9 +1,10 @@
 import React from 'react'
-import { View, StyleSheet, Share } from 'react-native'
-import { Modal, Portal, Text, Button, IconButton } from 'react-native-paper'
+import { View, StyleSheet, Share, Pressable } from 'react-native'
+import { Modal, Portal, Text } from 'react-native-paper'
 import QRCode from 'react-native-qrcode-svg'
-import { Copy, Share2 } from 'lucide-react-native'
+import { Copy, Share2, X } from 'lucide-react-native'
 import * as Clipboard from 'expo-clipboard'
+import { Colors, Spacing, Radius } from '../theme'
 
 interface WalletInfoModalProps {
     visible: boolean
@@ -13,69 +14,45 @@ interface WalletInfoModalProps {
 }
 
 export default function WalletInfoModal({ visible, onDismiss, walletName, nwcUri }: WalletInfoModalProps) {
-
-    const handleCopy = async () => {
-        await Clipboard.setStringAsync(nwcUri)
-    }
-
-    const handleShare = async () => {
-        await Share.share({
-            message: nwcUri,
-            title: `NWC Connection - ${walletName}`
-        })
-    }
+    const handleCopy = async () => { await Clipboard.setStringAsync(nwcUri) }
+    const handleShare = async () => { await Share.share({ message: nwcUri, title: `NWC - ${walletName}` }) }
 
     return (
         <Portal>
-            <Modal
-                visible={visible}
-                onDismiss={onDismiss}
-                contentContainerStyle={styles.container}
-            >
+            <Modal visible={visible} onDismiss={onDismiss} contentContainerStyle={styles.container}>
                 <View style={styles.content}>
                     <View style={styles.header}>
-                        <Text variant="headlineSmall" style={styles.title}>Wallet Config</Text>
-                        <IconButton icon="close" iconColor="#888" onPress={onDismiss} />
+                        <Text style={styles.title}>Connection</Text>
+                        <Pressable onPress={onDismiss} hitSlop={8}>
+                            <X size={18} color={Colors.textSecondary} />
+                        </Pressable>
                     </View>
 
-                    <Text variant="titleMedium" style={styles.subtitle}>{walletName}</Text>
-                    <Text variant="bodySmall" style={styles.description}>
-                        Scan this QR code or copy the URI to connect another app to this sub-wallet.
+                    <Text style={styles.walletName}>{walletName}</Text>
+                    <Text style={styles.description}>
+                        Scan or copy the URI to connect another app to this wallet.
                     </Text>
 
-                    <View style={styles.qrContainer}>
-                        <View style={styles.qrWrapper}>
-                            <QRCode
-                                value={nwcUri}
-                                size={220}
-                                color="black"
-                                backgroundColor="white"
-                            />
+                    <View style={styles.qrSection}>
+                        <View style={styles.qrRing}>
+                            <View style={styles.qrWrapper}>
+                                <QRCode value={nwcUri} size={220} color="black" backgroundColor="white" />
+                            </View>
                         </View>
 
-                        <Text variant="bodySmall" style={styles.uriText} numberOfLines={2} ellipsizeMode="middle">
+                        <Text style={styles.uriText} numberOfLines={2} ellipsizeMode="middle">
                             {nwcUri}
                         </Text>
 
                         <View style={styles.actionRow}>
-                            <Button
-                                mode="outlined"
-                                icon={() => <Copy size={18} color="#FFD700" />}
-                                onPress={handleCopy}
-                                style={styles.actionButton}
-                                textColor="#FFD700"
-                            >
-                                Copy URI
-                            </Button>
-                            <Button
-                                mode="outlined"
-                                icon={() => <Share2 size={18} color="#FFD700" />}
-                                onPress={handleShare}
-                                style={styles.actionButton}
-                                textColor="#FFD700"
-                            >
-                                Share
-                            </Button>
+                            <Pressable style={styles.actionBtn} onPress={handleCopy}>
+                                <Copy size={16} color={Colors.accent} />
+                                <Text style={styles.actionText}>Copy URI</Text>
+                            </Pressable>
+                            <Pressable style={styles.actionBtn} onPress={handleShare}>
+                                <Share2 size={16} color={Colors.accent} />
+                                <Text style={styles.actionText}>Share</Text>
+                            </Pressable>
                         </View>
                     </View>
                 </View>
@@ -85,59 +62,78 @@ export default function WalletInfoModal({ visible, onDismiss, walletName, nwcUri
 }
 
 const styles = StyleSheet.create({
-    container: {
-        margin: 20,
-    },
+    container: { margin: Spacing.lg },
     content: {
-        backgroundColor: '#141414',
-        padding: 24,
-        borderRadius: 20,
+        backgroundColor: Colors.surfaceElevated,
+        padding: Spacing.lg,
+        borderRadius: Radius.lg,
         borderWidth: 1,
-        borderColor: '#333',
+        borderColor: Colors.surfaceBorder,
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 8,
+        marginBottom: Spacing.sm,
     },
     title: {
-        color: '#FFD700',
-        fontWeight: 'bold',
-    },
-    subtitle: {
-        color: '#fff',
-        marginBottom: 8,
+        color: Colors.text,
+        fontSize: 18,
         fontWeight: '600',
     },
+    walletName: {
+        color: Colors.text,
+        fontSize: 15,
+        fontWeight: '500',
+        marginBottom: Spacing.xs,
+    },
     description: {
-        color: '#888',
-        marginBottom: 20,
+        color: Colors.textSecondary,
+        fontSize: 13,
+        marginBottom: Spacing.lg,
         lineHeight: 18,
     },
-    qrContainer: {
+    qrSection: {
         alignItems: 'center',
+    },
+    qrRing: {
+        padding: 3,
+        borderRadius: 16,
+        borderWidth: 2,
+        borderColor: Colors.accent,
+        marginBottom: Spacing.lg,
     },
     qrWrapper: {
         padding: 16,
         backgroundColor: '#fff',
         borderRadius: 12,
-        marginBottom: 20,
     },
     uriText: {
-        color: '#666',
-        marginBottom: 24,
+        color: Colors.textTertiary,
+        marginBottom: Spacing.lg,
         width: '100%',
         textAlign: 'center',
         fontSize: 12,
     },
     actionRow: {
         flexDirection: 'row',
-        gap: 12,
+        gap: Spacing.sm,
         width: '100%',
     },
-    actionButton: {
+    actionBtn: {
         flex: 1,
-        borderColor: '#333',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: Spacing.sm,
+        paddingVertical: 12,
+        borderRadius: Radius.md,
+        borderWidth: 1,
+        borderColor: Colors.surfaceBorder,
+    },
+    actionText: {
+        color: Colors.accent,
+        fontWeight: '500',
+        fontSize: 14,
     },
 })

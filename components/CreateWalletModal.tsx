@@ -1,10 +1,11 @@
 import React, { useState } from 'react'
-import { View, StyleSheet, ScrollView } from 'react-native'
-import { Modal, Portal, Text, TextInput, Button, Card, IconButton } from 'react-native-paper'
+import { View, StyleSheet, ScrollView, Pressable } from 'react-native'
+import { Modal, Portal, Text, TextInput, Button } from 'react-native-paper'
 import { walletManager } from '../services/WalletManager'
-import { NWCPermission, WalletConfig, SubWallet } from '../types'
+import type { NWCPermission, WalletConfig, SubWallet } from '../types'
 import QRScanner from './QRScanner'
-import { Scan } from 'lucide-react-native'
+import { Scan, X } from 'lucide-react-native'
+import { Colors, Spacing, Radius } from '../theme'
 
 interface CreateWalletModalProps {
     visible: boolean
@@ -12,81 +13,37 @@ interface CreateWalletModalProps {
     onWalletCreated: (wallet: SubWallet) => void
 }
 
-const AVAILABLE_PERMISSIONS: { key: NWCPermission; label: string }[] = [
-    { key: 'get_info', label: 'Get Info' },
-    { key: 'get_balance', label: 'Get Balance' },
-    { key: 'make_invoice', label: 'Make Invoice' },
-    { key: 'pay_invoice', label: 'Pay Invoice' },
-    { key: 'list_transactions', label: 'List Transactions' },
-]
-
-export default function CreateWalletModal({
-    visible,
-    onDismiss,
-    onWalletCreated,
-}: CreateWalletModalProps) {
+export default function CreateWalletModal({ visible, onDismiss, onWalletCreated }: CreateWalletModalProps) {
     const [mode, setMode] = useState<'create' | 'import'>('create')
     const [name, setName] = useState('')
     const [nwcUri, setNwcUri] = useState('')
     const [selectedPermissions, setSelectedPermissions] = useState<Set<NWCPermission>>(
         new Set(['get_info', 'get_balance'])
     )
-
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
     const [scannerVisible, setScannerVisible] = useState(false)
 
-    const togglePermission = (perm: NWCPermission) => {
-        const newPerms = new Set(selectedPermissions)
-        if (newPerms.has(perm)) {
-            newPerms.delete(perm)
-        } else {
-            newPerms.add(perm)
-        }
-        setSelectedPermissions(newPerms)
-    }
-
     const handleCreate = async () => {
-        if (!name.trim()) {
-            setError('Please enter a wallet name')
-            return
-        }
-
+        if (!name.trim()) { setError('Please enter a wallet name'); return }
         if (mode === 'import') {
-            if (!nwcUri.trim()) {
-                setError('Please enter an NWC URI')
-                return
-            }
-            if (!nwcUri.startsWith('nostr+walletconnect://')) {
-                setError('Invalid NWC URI format')
-                return
-            }
-        } else {
-            if (selectedPermissions.size === 0) {
-                setError('Please select at least one permission')
-                return
-            }
+            if (!nwcUri.trim()) { setError('Please enter an NWC URI'); return }
+            if (!nwcUri.startsWith('nostr+walletconnect://')) { setError('Invalid NWC URI format'); return }
+        } else if (selectedPermissions.size === 0) {
+            setError('Please select at least one permission'); return
         }
 
         setLoading(true)
         setError('')
-
         try {
             const config: WalletConfig = {
                 name: name.trim(),
                 permissions: mode === 'create' ? Array.from(selectedPermissions) : [],
                 nwcUri: mode === 'import' ? nwcUri.trim() : undefined
             }
-
             const wallet = await walletManager.createSubWallet(config)
             onWalletCreated(wallet)
-
-            // Reset form
-            setName('')
-            setNwcUri('')
-            setSelectedPermissions(new Set(['get_info', 'get_balance']))
-
-            setMode('create')
+            setName(''); setNwcUri(''); setSelectedPermissions(new Set(['get_info', 'get_balance'])); setMode('create')
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to create wallet')
         } finally {
@@ -94,10 +51,7 @@ export default function CreateWalletModal({
         }
     }
 
-    const handleScan = (data: string) => {
-        setNwcUri(data)
-        setScannerVisible(false)
-    }
+    const handleScan = (data: string) => { setNwcUri(data); setScannerVisible(false) }
 
     if (scannerVisible) {
         return <QRScanner onScan={handleScan} onClose={() => setScannerVisible(false)} title="Scan NWC" />
@@ -105,123 +59,104 @@ export default function CreateWalletModal({
 
     return (
         <Portal>
-            <Modal
-                visible={visible}
-                onDismiss={onDismiss}
-                contentContainerStyle={styles.modalContainer}
-            >
+            <Modal visible={visible} onDismiss={onDismiss} contentContainerStyle={styles.modalContainer}>
                 <ScrollView>
-                    <Card style={styles.card}>
-                        <Card.Content>
-                            <Text variant="headlineSmall" style={styles.title}>
+                    <View style={styles.card}>
+                        {/* Header */}
+                        <View style={styles.header}>
+                            <Text style={styles.title}>
                                 {mode === 'create' ? 'Create Sub-Wallet' : 'Import Wallet'}
                             </Text>
+                            <Pressable onPress={onDismiss} hitSlop={8}>
+                                <X size={20} color={Colors.textSecondary} />
+                            </Pressable>
+                        </View>
 
-                            <View style={styles.toggleRow}>
-                                <Button
-                                    mode={mode === 'create' ? 'contained' : 'outlined'}
-                                    onPress={() => setMode('create')}
-                                    style={styles.toggleButton}
-                                    buttonColor={mode === 'create' ? '#FFD700' : undefined}
-                                    textColor={mode === 'create' ? '#000000' : '#888888'}
-                                >
-                                    New
-                                </Button>
-                                <Button
-                                    mode={mode === 'import' ? 'contained' : 'outlined'}
-                                    onPress={() => setMode('import')}
-                                    style={styles.toggleButton}
-                                    buttonColor={mode === 'import' ? '#FFD700' : undefined}
-                                    textColor={mode === 'import' ? '#000000' : '#888888'}
-                                >
-                                    Import
-                                </Button>
-                            </View>
+                        {/* Mode Toggle */}
+                        <View style={styles.toggleRow}>
+                            <Pressable
+                                style={[styles.toggleBtn, mode === 'create' && styles.toggleActive]}
+                                onPress={() => setMode('create')}
+                            >
+                                <Text style={[styles.toggleText, mode === 'create' && styles.toggleTextActive]}>New</Text>
+                            </Pressable>
+                            <Pressable
+                                style={[styles.toggleBtn, mode === 'import' && styles.toggleActive]}
+                                onPress={() => setMode('import')}
+                            >
+                                <Text style={[styles.toggleText, mode === 'import' && styles.toggleTextActive]}>Import</Text>
+                            </Pressable>
+                        </View>
 
-                            <TextInput
-                                label="Wallet Name"
-                                value={name}
-                                onChangeText={setName}
-                                mode="outlined"
-                                placeholder="e.g., Spending, Savings, Merchant"
-                                style={styles.input}
-                                error={!!error && !name.trim()}
-                            />
+                        {/* Name Input */}
+                        <TextInput
+                            label="Wallet Name"
+                            value={name}
+                            onChangeText={setName}
+                            mode="outlined"
+                            placeholder="e.g., Spending, Savings"
+                            style={styles.input}
+                            outlineColor={Colors.surfaceBorder}
+                            activeOutlineColor={Colors.accent}
+                            error={!!error && !name.trim()}
+                        />
 
-                            {mode === 'import' ? (
-                                <View style={styles.importRow}>
-                                    <TextInput
-                                        label="NWC URI"
-                                        value={nwcUri}
-                                        onChangeText={setNwcUri}
-                                        mode="outlined"
-                                        placeholder="nostr+walletconnect://..."
-                                        style={[styles.input, styles.importInput]}
-                                        multiline
-                                        numberOfLines={3}
-                                        error={!!error && (!nwcUri || !nwcUri.startsWith('nostr+walletconnect://'))}
-                                    />
-                                    <IconButton
-                                        icon={() => <Scan size={24} color="#FFD700" />}
-                                        onPress={() => setScannerVisible(true)}
-                                        style={styles.scanButton}
-                                    />
-                                </View>
-                            ) : (
-                                <>
-                                    <Text variant="titleMedium" style={styles.sectionTitle}>
-                                        Access Level
-                                    </Text>
-                                    <View style={styles.toggleRow}>
-                                        <Button
-                                            mode={selectedPermissions.has('pay_invoice') ? 'contained' : 'outlined'}
-                                            onPress={() => setSelectedPermissions(new Set(['get_info', 'get_balance', 'make_invoice', 'pay_invoice', 'list_transactions']))}
-                                            style={styles.toggleButton}
-                                            buttonColor={selectedPermissions.has('pay_invoice') ? '#FFD700' : undefined}
-                                            textColor={selectedPermissions.has('pay_invoice') ? '#000000' : '#888888'}
-                                        >
-                                            Full Access
-                                        </Button>
-                                        <Button
-                                            mode={!selectedPermissions.has('pay_invoice') ? 'contained' : 'outlined'}
-                                            onPress={() => setSelectedPermissions(new Set(['get_info', 'get_balance', 'make_invoice', 'list_transactions']))}
-                                            style={styles.toggleButton}
-                                            buttonColor={!selectedPermissions.has('pay_invoice') ? '#FFD700' : undefined}
-                                            textColor={!selectedPermissions.has('pay_invoice') ? '#000000' : '#888888'}
-                                        >
-                                            Receive Only
-                                        </Button>
-                                    </View>
-                                </>
-                            )}
-
-                            {error ? (
-                                <Text style={styles.errorText}>{error}</Text>
-                            ) : null}
-
-                            <View style={styles.buttonRow}>
-                                <Button
+                        {mode === 'import' ? (
+                            <View style={styles.importRow}>
+                                <TextInput
+                                    label="NWC URI"
+                                    value={nwcUri}
+                                    onChangeText={setNwcUri}
                                     mode="outlined"
-                                    onPress={onDismiss}
-                                    style={styles.cancelButton}
-                                    textColor="#888888"
-                                >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    mode="contained"
-                                    onPress={handleCreate}
-                                    loading={loading}
-                                    disabled={loading}
-                                    style={styles.createButton}
-                                    buttonColor="#FFD700"
-                                    textColor="#000000"
-                                >
-                                    {mode === 'create' ? 'Create' : 'Import'}
-                                </Button>
+                                    placeholder="nostr+walletconnect://..."
+                                    style={[styles.input, { flex: 1 }]}
+                                    outlineColor={Colors.surfaceBorder}
+                                    activeOutlineColor={Colors.accent}
+                                    multiline
+                                    numberOfLines={3}
+                                />
+                                <Pressable style={styles.scanBtn} onPress={() => setScannerVisible(true)}>
+                                    <Scan size={20} color={Colors.accent} />
+                                </Pressable>
                             </View>
-                        </Card.Content>
-                    </Card>
+                        ) : (
+                            <>
+                                <Text style={styles.sectionLabel}>ACCESS LEVEL</Text>
+                                <View style={styles.toggleRow}>
+                                    <Pressable
+                                        style={[styles.toggleBtn, selectedPermissions.has('pay_invoice') && styles.toggleActive]}
+                                        onPress={() => setSelectedPermissions(new Set(['get_info', 'get_balance', 'make_invoice', 'pay_invoice', 'list_transactions']))}
+                                    >
+                                        <Text style={[styles.toggleText, selectedPermissions.has('pay_invoice') && styles.toggleTextActive]}>Full Access</Text>
+                                    </Pressable>
+                                    <Pressable
+                                        style={[styles.toggleBtn, !selectedPermissions.has('pay_invoice') && styles.toggleActive]}
+                                        onPress={() => setSelectedPermissions(new Set(['get_info', 'get_balance', 'make_invoice', 'list_transactions']))}
+                                    >
+                                        <Text style={[styles.toggleText, !selectedPermissions.has('pay_invoice') && styles.toggleTextActive]}>Receive Only</Text>
+                                    </Pressable>
+                                </View>
+                            </>
+                        )}
+
+                        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+                        {/* Actions */}
+                        <View style={styles.actionRow}>
+                            <Pressable style={styles.cancelBtn} onPress={onDismiss}>
+                                <Text style={styles.cancelText}>Cancel</Text>
+                            </Pressable>
+                            <Pressable
+                                style={[styles.createBtn, loading && { opacity: 0.6 }]}
+                                onPress={handleCreate}
+                                disabled={loading}
+                            >
+                                <Text style={styles.createText}>
+                                    {loading ? 'Creating...' : mode === 'create' ? 'Create' : 'Import'}
+                                </Text>
+                            </Pressable>
+                        </View>
+                    </View>
                 </ScrollView>
             </Modal>
         </Portal>
@@ -230,77 +165,104 @@ export default function CreateWalletModal({
 
 const styles = StyleSheet.create({
     modalContainer: {
-        margin: 20,
+        margin: Spacing.lg,
         maxHeight: '90%',
     },
     card: {
-        backgroundColor: '#141414',
+        backgroundColor: Colors.surfaceElevated,
+        padding: Spacing.lg,
+        borderRadius: Radius.lg,
+        borderWidth: 1,
+        borderColor: Colors.surfaceBorder,
     },
-    title: {
-        color: '#FFD700',
-        marginBottom: 20,
-    },
-    input: {
-        marginBottom: 16,
-    },
-    sectionTitle: {
-        color: '#FFFFFF',
-        marginTop: 16,
-        marginBottom: 12,
-    },
-    checkboxRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    checkboxLabel: {
-        color: '#E0E0E0',
-        fontSize: 16,
-        flex: 1,
-    },
-    buttonRow: {
+    header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginTop: 24,
-        gap: 12,
+        alignItems: 'center',
+        marginBottom: Spacing.lg,
+    },
+    title: {
+        color: Colors.text,
+        fontSize: 18,
+        fontWeight: '600',
     },
     toggleRow: {
         flexDirection: 'row',
-        marginBottom: 16,
-        gap: 12,
+        gap: Spacing.sm,
+        marginBottom: Spacing.md,
     },
-    toggleButton: {
+    toggleBtn: {
         flex: 1,
-        borderColor: '#333333',
+        paddingVertical: 12,
+        borderRadius: Radius.md,
+        borderWidth: 1,
+        borderColor: Colors.surfaceBorder,
+        alignItems: 'center',
     },
-    cancelButton: {
-        flex: 1,
-        borderColor: '#333333',
+    toggleActive: {
+        backgroundColor: Colors.accent,
+        borderColor: Colors.accent,
     },
-    createButton: {
-        flex: 1,
+    toggleText: {
+        color: Colors.textSecondary,
+        fontWeight: '500',
+        fontSize: 14,
     },
-    errorText: {
-        color: '#CF6679',
-        marginTop: 8,
+    toggleTextActive: {
+        color: Colors.accentText,
     },
-    budgetRow: {
-        marginBottom: 8,
-    },
-    budgetInput: {
-        flex: 1,
+    input: {
+        marginBottom: Spacing.md,
+        backgroundColor: Colors.surfaceElevated,
     },
     importRow: {
         flexDirection: 'row',
         alignItems: 'center',
+        gap: Spacing.sm,
     },
-    importInput: {
+    scanBtn: {
+        padding: Spacing.sm,
+        marginBottom: Spacing.md,
+    },
+    sectionLabel: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: Colors.textSecondary,
+        letterSpacing: 1.5,
+        marginBottom: Spacing.sm,
+    },
+    errorText: {
+        color: Colors.danger,
+        fontSize: 13,
+        marginTop: Spacing.xs,
+        marginBottom: Spacing.sm,
+    },
+    actionRow: {
+        flexDirection: 'row',
+        gap: Spacing.sm,
+        marginTop: Spacing.lg,
+    },
+    cancelBtn: {
         flex: 1,
-        marginBottom: 16,
+        paddingVertical: 14,
+        borderRadius: Radius.md,
+        borderWidth: 1,
+        borderColor: Colors.surfaceBorder,
+        alignItems: 'center',
     },
-    scanButton: {
-        margin: 0,
-        marginLeft: 8,
-        marginBottom: 16,
+    cancelText: {
+        color: Colors.textSecondary,
+        fontWeight: '500',
+    },
+    createBtn: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: Radius.md,
+        backgroundColor: Colors.accent,
+        alignItems: 'center',
+    },
+    createText: {
+        color: Colors.accentText,
+        fontWeight: '600',
     },
 })

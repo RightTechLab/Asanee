@@ -37,3 +37,11 @@ export interface WalletConfig {
     permissions: NWCPermission[]
     nwcUri?: string
 }
+
+export interface SavedWallet {
+    id: string           // unique id (derived from pubkey or generated)
+    name: string         // user-given name
+    nwcUri: string       // the master NWC URI
+    pubkey: string | null // extracted from URI
+    lastUsed: number     // timestamp of last connection
+}

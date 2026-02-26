@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react'
-import { StyleSheet, View, Alert } from 'react-native'
+import React, { useState } from 'react'
+import { StyleSheet, View, Pressable } from 'react-native'
 import { CameraView, useCameraPermissions } from 'expo-camera'
-import { Button, Text, IconButton } from 'react-native-paper'
+import { Button, Text } from 'react-native-paper'
+import { X } from 'lucide-react-native'
+import { Colors, Spacing } from '../theme'
 
 interface QRScannerProps {
     onScan: (data: string) => void
@@ -13,20 +15,16 @@ export default function QRScanner({ onScan, onClose, title = 'Scan Lightning Inv
     const [permission, requestPermission] = useCameraPermissions()
     const [scanned, setScanned] = useState(false)
 
-    if (!permission) {
-        // Camera permissions are still loading.
-        return <View style={styles.container} />
-    }
+    if (!permission) return <View style={styles.container} />
 
     if (!permission.granted) {
-        // Camera permissions are not granted yet.
         return (
             <View style={styles.container}>
-                <Text style={styles.message}>We need your permission to show the camera</Text>
-                <Button onPress={requestPermission} mode="contained" buttonColor="#FFD700" textColor="#000">
+                <Text style={styles.message}>We need camera permission to scan QR codes</Text>
+                <Button onPress={requestPermission} mode="contained" buttonColor={Colors.accent} textColor={Colors.accentText}>
                     Grant Permission
                 </Button>
-                <Button onPress={onClose} textColor="#888" style={{ marginTop: 20 }}>
+                <Button onPress={onClose} textColor={Colors.textSecondary} style={{ marginTop: Spacing.lg }}>
                     Cancel
                 </Button>
             </View>
@@ -34,31 +32,28 @@ export default function QRScanner({ onScan, onClose, title = 'Scan Lightning Inv
     }
 
     const handleBarcodeScanned = ({ data }: { data: string }) => {
-        if (!scanned) {
-            setScanned(true)
-            onScan(data)
-        }
+        if (!scanned) { setScanned(true); onScan(data) }
     }
 
     return (
-        <View style={styles.fullScreenContainer}>
+        <View style={styles.fullScreen}>
             <CameraView
                 style={styles.camera}
                 onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
-                barcodeScannerSettings={{
-                    barcodeTypes: ['qr'],
-                }}
+                barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
             >
                 <View style={styles.overlay}>
                     <View style={styles.header}>
                         <Text style={styles.title}>{title}</Text>
-                        <IconButton icon="close" iconColor="#fff" onPress={onClose} />
+                        <Pressable onPress={onClose} hitSlop={12}>
+                            <X size={22} color="#fff" />
+                        </Pressable>
                     </View>
-                    <View style={styles.scannerTarget}>
-                        <View style={styles.cornerTopLeft} />
-                        <View style={styles.cornerTopRight} />
-                        <View style={styles.cornerBottomLeft} />
-                        <View style={styles.cornerBottomRight} />
+                    <View style={styles.target}>
+                        <View style={[styles.corner, styles.tl]} />
+                        <View style={[styles.corner, styles.tr]} />
+                        <View style={[styles.corner, styles.bl]} />
+                        <View style={[styles.corner, styles.br]} />
                     </View>
                     <Text style={styles.hint}>Place QR code inside the frame</Text>
                 </View>
@@ -71,25 +66,25 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         justifyContent: 'center',
-        backgroundColor: '#000',
+        alignItems: 'center',
+        backgroundColor: Colors.bg,
+        padding: Spacing.lg,
     },
-    fullScreenContainer: {
+    fullScreen: {
         ...StyleSheet.absoluteFillObject,
         zIndex: 1000,
-        backgroundColor: '#000',
+        backgroundColor: Colors.bg,
     },
     message: {
         textAlign: 'center',
-        paddingBottom: 20,
-        color: '#fff',
-        fontSize: 16,
+        paddingBottom: Spacing.lg,
+        color: Colors.text,
+        fontSize: 15,
     },
-    camera: {
-        flex: 1,
-    },
+    camera: { flex: 1 },
     overlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'rgba(0,0,0,0.6)',
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -100,62 +95,31 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         width: '100%',
         justifyContent: 'space-between',
-        paddingHorizontal: 20,
+        paddingHorizontal: Spacing.lg,
     },
     title: {
         color: '#fff',
-        fontSize: 18,
-        fontWeight: 'bold',
+        fontSize: 17,
+        fontWeight: '600',
     },
-    scannerTarget: {
+    target: {
         width: 250,
         height: 250,
         position: 'relative',
     },
-    cornerTopLeft: {
+    corner: {
         position: 'absolute',
-        top: 0,
-        left: 0,
-        width: 40,
-        height: 40,
-        borderTopWidth: 4,
-        borderLeftWidth: 4,
-        borderColor: '#FFD700',
+        width: 36,
+        height: 36,
     },
-    cornerTopRight: {
-        position: 'absolute',
-        top: 0,
-        right: 0,
-        width: 40,
-        height: 40,
-        borderTopWidth: 4,
-        borderRightWidth: 4,
-        borderColor: '#FFD700',
-    },
-    cornerBottomLeft: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        width: 40,
-        height: 40,
-        borderBottomWidth: 4,
-        borderLeftWidth: 4,
-        borderColor: '#FFD700',
-    },
-    cornerBottomRight: {
-        position: 'absolute',
-        bottom: 0,
-        right: 0,
-        width: 40,
-        height: 40,
-        borderBottomWidth: 4,
-        borderRightWidth: 4,
-        borderColor: '#FFD700',
-    },
+    tl: { top: 0, left: 0, borderTopWidth: 3, borderLeftWidth: 3, borderColor: Colors.accent },
+    tr: { top: 0, right: 0, borderTopWidth: 3, borderRightWidth: 3, borderColor: Colors.accent },
+    bl: { bottom: 0, left: 0, borderBottomWidth: 3, borderLeftWidth: 3, borderColor: Colors.accent },
+    br: { bottom: 0, right: 0, borderBottomWidth: 3, borderRightWidth: 3, borderColor: Colors.accent },
     hint: {
         color: '#fff',
-        marginTop: 40,
-        fontSize: 14,
-        opacity: 0.8,
+        marginTop: Spacing.xl,
+        fontSize: 13,
+        opacity: 0.7,
     },
 })

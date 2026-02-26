@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react'
-import { View, StyleSheet, ScrollView, Alert, Platform } from 'react-native'
+import { View, StyleSheet, ScrollView, Alert, Platform, Pressable, Modal as RNModal } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Text, Card, IconButton, FAB, Menu, Dialog, Portal, TextInput, Button } from 'react-native-paper'
+import { Text, Menu, Dialog, Portal, TextInput, Button } from 'react-native-paper'
 import { useWalletStore } from '../store/walletStore'
 import { walletManager } from '../services/WalletManager'
 import CreateWalletModal from '../components/CreateWalletModal'
-
-import { SubWallet } from '../types'
+import QRScanner from '../components/QRScanner'
+import type { SubWallet, SavedWallet } from '../types'
 import { SecurityService } from '../services/SecurityService'
-import { Eye, EyeOff } from 'lucide-react-native'
+import { Eye, EyeOff, LogOut, Plus, RefreshCw, Zap, ChevronDown, ChevronUp, MoreVertical, Wallet, Scan, Edit3, Check } from 'lucide-react-native'
+import { Colors, Spacing, Radius } from '../theme'
 
 
 export default function Dashboard() {
@@ -38,9 +39,28 @@ export default function Dashboard() {
     const [walletBalances, setWalletBalances] = useState<Record<string, number | null>>({})
     const [expandedWallets, setExpandedWallets] = useState<Record<string, boolean>>({})
 
+    const [nameBeforeLogoutVisible, setNameBeforeLogoutVisible] = useState(false)
+    const [logoutWalletName, setLogoutWalletName] = useState('')
+
+    // ─── Wallet Switcher State ──────────────────────────────
+    const [currentWalletName, setCurrentWalletName] = useState<string | null>(null)
+    const [switcherVisible, setSwitcherVisible] = useState(false)
+    const [savedWallets, setSavedWallets] = useState<SavedWallet[]>([])
+    const [masterNameEditing, setMasterNameEditing] = useState(false)
+    const [masterNameInput, setMasterNameInput] = useState('')
+    const [switcherScannerVisible, setSwitcherScannerVisible] = useState(false)
+
+    const activeWallets = subWallets
+
     useEffect(() => {
         refreshTotalBalance()
+        loadCurrentWalletName()
     }, [])
+
+    const loadCurrentWalletName = async () => {
+        const name = await walletManager.getCurrentWalletName()
+        setCurrentWalletName(name)
+    }
 
     const refreshTotalBalance = async () => {
         setLoading(true)
@@ -48,16 +68,11 @@ export default function Dashboard() {
             const info = await walletManager.getBalance()
             setTotalBalance(info.balance)
 
-            // Also refresh individual wallet balances
             const balances: Record<string, number | null> = {}
-            let sum = 0
-
             await Promise.all(activeWallets.map(async (w) => {
                 const b = await walletManager.getWalletBalance(w.id)
                 balances[w.id] = b
-                if (b !== null) sum += b
             }))
-
             setWalletBalances(balances)
         } catch (error) {
             console.error('Failed to refresh total balance', error)
@@ -66,10 +81,79 @@ export default function Dashboard() {
         }
     }
 
-    const handleDisconnect = () => {
+    // ─── Wallet Switcher Logic ──────────────────────────────
+
+    const openSwitcher = async () => {
+        const wallets = await walletManager.getSavedWallets()
+        setSavedWallets(wallets)
+        setMasterNameEditing(false)
+        setMasterNameInput(currentWalletName || '')
+        setSwitcherVisible(true)
+    }
+
+    const handleSaveMasterName = async () => {
+        if (masterNameInput.trim()) {
+            await walletManager.saveWalletToList(masterNameInput.trim())
+            setCurrentWalletName(masterNameInput.trim())
+            // Reload saved wallets to reflect name change
+            const wallets = await walletManager.getSavedWallets()
+            setSavedWallets(wallets)
+        }
+        setMasterNameEditing(false)
+    }
+
+    const handleSwitchWallet = async (wallet: SavedWallet) => {
+        setSwitcherVisible(false)
+        // Disconnect current, connect to new
+        await walletManager.disconnect()
+        try {
+            await walletManager.connect(wallet.nwcUri)
+            const wallets = walletManager.listWallets()
+            setSubWallets(wallets)
+            setCurrentWalletName(wallet.name || null)
+            refreshTotalBalance()
+        } catch (err) {
+            Alert.alert('Error', err instanceof Error ? err.message : 'Failed to connect')
+            setConnected(false)
+            setSubWallets([])
+        }
+    }
+
+    const handleSwitcherScan = async (data: string) => {
+        setSwitcherScannerVisible(false)
+        setSwitcherVisible(false)
+        // Disconnect current, connect to scanned
+        await walletManager.disconnect()
+        try {
+            await walletManager.connect(data)
+            const wallets = walletManager.listWallets()
+            setSubWallets(wallets)
+            const name = await walletManager.getCurrentWalletName()
+            setCurrentWalletName(name)
+            refreshTotalBalance()
+        } catch (err) {
+            Alert.alert('Error', err instanceof Error ? err.message : 'Failed to connect')
+            setConnected(false)
+            setSubWallets([])
+        }
+    }
+
+    // ─── Disconnect Logic ───────────────────────────────────
+
+    const handleDisconnect = async () => {
+        const name = await walletManager.getCurrentWalletName()
+        if (!name) {
+            setLogoutWalletName('')
+            setNameBeforeLogoutVisible(true)
+        } else {
+            confirmDisconnect()
+        }
+    }
+
+    const confirmDisconnect = () => {
         Alert.alert(
-            'Disconnect Wallet',
-            'Are you sure you want to disconnect?',
+            'Disconnect',
+            'You can reconnect from saved wallets later.',
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
@@ -85,10 +169,20 @@ export default function Dashboard() {
         )
     }
 
+    const handleNameAndDisconnect = async () => {
+        if (logoutWalletName.trim()) {
+            await walletManager.saveWalletToList(logoutWalletName.trim())
+        }
+        setNameBeforeLogoutVisible(false)
+        confirmDisconnect()
+    }
+
+    // ─── Sub-wallet Management ──────────────────────────────
+
     const handleRevokeWallet = (wallet: SubWallet) => {
         Alert.alert(
             'Delete Wallet',
-            `Are you sure you want to delete "${wallet.name}"?`,
+            `Delete "${wallet.name}"? This cannot be undone.`,
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
@@ -104,12 +198,6 @@ export default function Dashboard() {
         )
     }
 
-
-
-    const handleCreateWallet = () => {
-        setModalVisible(true)
-    }
-
     const handleRenameSubmit = async () => {
         if (!walletToRename || !newWalletName.trim()) return
         try {
@@ -119,31 +207,26 @@ export default function Dashboard() {
             setRenameDialogVisible(false)
             setWalletToRename(null)
         } catch (error) {
-            console.error('Failed to rename wallet', error)
             Alert.alert('Error', 'Failed to rename wallet')
         }
     }
 
     const handleTopUpSubmit = async () => {
         if (!walletToTopUp || !topUpAmount.trim()) return
-        
-        const amountSats = parseInt(topUpAmount.trim())
+
+        const amountSats = Number.parseInt(topUpAmount.trim())
         if (Number.isNaN(amountSats) || amountSats <= 0) {
             Alert.alert('Error', 'Please enter a valid amount')
             return
         }
-        
+
         const amountMsat = amountSats * 1000
         const totalMasterMsat = totalBalance || 0
-        
         const sumSubwalletsMsat = Object.values(walletBalances).reduce((acc, bal) => (acc || 0) + (bal || 0), 0) || 0
         const availableMsat = Math.max(0, totalMasterMsat - sumSubwalletsMsat)
-        
+
         if (amountMsat > availableMsat) {
-            Alert.alert(
-                'Insufficient Balance', 
-                `Maximum topup available is ${Math.floor(availableMsat / 1000).toLocaleString()} sats.`
-            )
+            Alert.alert('Insufficient Balance', `Max available: ${Math.floor(availableMsat / 1000).toLocaleString()} sats`)
             return
         }
 
@@ -155,14 +238,12 @@ export default function Dashboard() {
             setWalletToTopUp(null)
             setTopUpAmount('')
             refreshTotalBalance()
-            Alert.alert('Success', 'Sub-wallet topped up successfully')
         } catch (error) {
-            console.error('Failed to top up wallet', error)
             Alert.alert('Error', 'Failed to top up wallet')
         }
     }
 
-    const handleWalletCreated = (wallet: SubWallet) => {
+    const handleWalletCreated = (_wallet: SubWallet) => {
         const wallets = walletManager.listWallets()
         setSubWallets(wallets)
         setModalVisible(false)
@@ -172,114 +253,116 @@ export default function Dashboard() {
     const toggleBalanceVisibility = async () => {
         if (!isBalanceVisible) {
             const ok = await SecurityService.authenticate('Authorize to reveal balances')
-            if (ok) {
-                setBalanceVisible(true)
-            }
+            if (ok) setBalanceVisible(true)
         } else {
             setBalanceVisible(false)
         }
     }
 
-    const activeWallets = subWallets
+    const formatBalance = (msat: number | null | undefined): string => {
+        if (msat === null || msat === undefined) return '---'
+        return Math.ceil(msat / 1000).toLocaleString()
+    }
+
+    // ─── QR Scanner for Switcher ────────────────────────────
+    if (switcherScannerVisible) {
+        return <QRScanner onScan={handleSwitcherScan} onClose={() => setSwitcherScannerVisible(false)} title="Scan NWC Connection" />
+    }
 
     return (
         <View style={styles.container}>
-            {/* Header */}
-            <View style={styles.header}>
-                <View>
-                    <Text variant="headlineMedium" style={styles.headerTitle}>
-                        Asanee ⚡
+            {/* Header with Wallet Switcher */}
+            <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) + 12 }]}>
+                <Pressable onPress={openSwitcher} style={({ pressed }) => [styles.headerLeft, pressed && { opacity: 0.7 }]}>
+                    <Text style={styles.headerTitle} numberOfLines={1}>
+                        {currentWalletName || 'Set Wallet Name'}
                     </Text>
-                    <Text variant="bodyMedium" style={styles.headerSubtitle}>
-                        {activeWallets.length} Active Wallet{activeWallets.length !== 1 ? 's' : ''}
-                    </Text>
-                </View>
-                <IconButton
-                    icon="logout"
-                    iconColor="#FFD700"
-                    size={24}
+                    {!currentWalletName && (
+                        <View style={styles.tapToNameBadge}>
+                            <Text style={styles.tapToNameText}>tap to name</Text>
+                        </View>
+                    )}
+                    {currentWalletName && (
+                        <Text style={styles.headerSubtitle}>
+                            {activeWallets.length} wallet{activeWallets.length !== 1 ? 's' : ''} · tap to switch
+                        </Text>
+                    )}
+                </Pressable>
+                <Pressable
                     onPress={handleDisconnect}
-                />
+                    style={({ pressed }) => [styles.logoutButton, pressed && { opacity: 0.6 }]}
+                >
+                    <LogOut size={18} color={Colors.textSecondary} />
+                </Pressable>
             </View>
 
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-                {/* Total Balance Card */}
-                <Card style={styles.totalBalanceCard}>
-                    <Card.Content style={styles.totalBalanceContent}>
-                        <View style={styles.totalBalanceHeader}>
-                            <Text style={styles.totalBalanceLabel}>Total Balance</Text>
-                            <View style={styles.eyeIconContainer}>
-                                <IconButton
-                                    icon={() => isBalanceVisible ? <EyeOff size={18} color="#888" /> : <Eye size={18} color="#888" />}
-                                    onPress={toggleBalanceVisibility}
-                                />
-                            </View>
-                        </View>
-                        <Text style={styles.totalBalanceAmount}>
+            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                {/* Total Balance */}
+                <View style={styles.balanceSection}>
+                    <View style={styles.balanceLabelRow}>
+                        <Text style={styles.balanceLabel}>Total Balance</Text>
+                        <Pressable onPress={toggleBalanceVisibility} hitSlop={12}>
                             {isBalanceVisible
-                                ? (totalBalance !== null ? Math.ceil(totalBalance / 1000).toLocaleString() : '---')
-                                : '*****'} <Text style={styles.totalBalanceSats}>sats</Text>
-                        </Text>
-                    </Card.Content>
-                </Card>
-
-                {/* Active Wallets Title */}
-                <View style={styles.sectionHeader}>
-                    <Text variant="titleMedium" style={styles.sectionTitle}>
-                        Sub-Wallets
+                                ? <EyeOff size={16} color={Colors.textTertiary} />
+                                : <Eye size={16} color={Colors.textTertiary} />}
+                        </Pressable>
+                    </View>
+                    <Text style={styles.balanceAmount}>
+                        {isBalanceVisible ? formatBalance(totalBalance) : '•••••'}
+                        <Text style={styles.balanceSats}> sats</Text>
                     </Text>
-                    <IconButton
-                        icon="refresh"
-                        iconColor="#888"
-                        size={20}
-                        onPress={refreshTotalBalance}
-                        loading={loading}
-                    />
                 </View>
-                {/* Active Wallets */}
-                <View>
-                    {activeWallets.length > 0 ? (
-                        activeWallets.map((wallet) => (
-                            <Card
-                                key={wallet.id}
-                                style={styles.walletCard}
-                                onPress={() => useWalletStore.getState().setSelectedWalletId(wallet.id)}
-                            >
-                                <Card.Title
-                                    title={wallet.name}
-                                    titleStyle={styles.walletTitle}
-                                    subtitle={wallet.permissions.length > 4 ? 'Full access' : 'Receive only'}
-                                    subtitleStyle={styles.walletSubtitle}
-                                    right={() => (
-                                        <View style={styles.walletRight}>
-                                            <Text style={styles.walletBalanceText}>
-                                                {isBalanceVisible
-                                                    ? (walletBalances[wallet.id] !== undefined && walletBalances[wallet.id] !== null
-                                                        ? Math.ceil(walletBalances[wallet.id]! / 1000).toLocaleString()
-                                                        : '---')
-                                                    : '*****'} sats
-                                            </Text>
-                                            <IconButton
-                                                icon={expandedWallets[wallet.id] ? "chevron-up" : "chevron-down"}
-                                                iconColor="#FFD700"
-                                                size={20}
+
+                {/* Section header */}
+                <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionLabel}>SUB-WALLETS</Text>
+                    <Pressable onPress={refreshTotalBalance} hitSlop={8}>
+                        <RefreshCw size={14} color={loading ? Colors.accent : Colors.textSecondary} />
+                    </Pressable>
+                </View>
+
+                {/* Wallet cards */}
+                {activeWallets.length > 0 ? (
+                    activeWallets.map((wallet) => (
+                        <Pressable
+                            key={wallet.id}
+                            style={styles.walletCard}
+                            onPress={() => useWalletStore.getState().setSelectedWalletId(wallet.id)}
+                        >
+                            <View style={styles.walletAccent} />
+                            <View style={styles.walletContent}>
+                                <View style={styles.walletTop}>
+                                    <View style={styles.walletInfo}>
+                                        <Text style={styles.walletName}>{wallet.name}</Text>
+                                        <Text style={styles.walletType}>
+                                            {wallet.permissions.length > 4 ? 'Full access' : 'Receive only'}
+                                        </Text>
+                                    </View>
+                                    <View style={styles.walletRight}>
+                                        <Text style={styles.walletBalance}>
+                                            {isBalanceVisible ? formatBalance(walletBalances[wallet.id]) : '•••••'}
+                                            <Text style={styles.walletBalanceSats}> sats</Text>
+                                        </Text>
+                                        <View style={styles.walletActions}>
+                                            <Pressable
                                                 onPress={(e) => {
-                                                    e.stopPropagation();
-                                                    setExpandedWallets(prev => ({
-                                                        ...prev,
-                                                        [wallet.id]: !prev[wallet.id]
-                                                    }));
+                                                    e.stopPropagation()
+                                                    setExpandedWallets(prev => ({ ...prev, [wallet.id]: !prev[wallet.id] }))
                                                 }}
-                                            />
+                                                hitSlop={8}
+                                            >
+                                                {expandedWallets[wallet.id]
+                                                    ? <ChevronUp size={16} color={Colors.textSecondary} />
+                                                    : <ChevronDown size={16} color={Colors.textSecondary} />}
+                                            </Pressable>
                                             <Menu
                                                 visible={menuVisible === wallet.id}
                                                 onDismiss={() => setMenuVisible(null)}
+                                                contentStyle={{ backgroundColor: Colors.surfaceElevated }}
                                                 anchor={
-                                                    <IconButton
-                                                        icon="dots-vertical"
-                                                        iconColor="#FFD700"
-                                                        onPress={() => setMenuVisible(wallet.id)}
-                                                    />
+                                                    <Pressable onPress={() => setMenuVisible(wallet.id)} hitSlop={8}>
+                                                        <MoreVertical size={16} color={Colors.textSecondary} />
+                                                    </Pressable>
                                                 }
                                             >
                                                 {wallet.permissions.length > 4 && (
@@ -311,44 +394,131 @@ export default function Dashboard() {
                                                 />
                                             </Menu>
                                         </View>
-                                    )}
-                                />
-                                {expandedWallets[wallet.id] && (
-                                    <Card.Content>
-                                        <View style={styles.permissionContainer}>
-                                            {wallet.permissions.map((perm, idx) => (
-                                                <View key={`${wallet.id}-perm-${idx}`} style={styles.permissionChip}>
-                                                    <Text style={styles.permissionText}>{perm}</Text>
-                                                </View>
-                                            ))}
-                                        </View>
+                                    </View>
+                                </View>
 
-                                    </Card.Content>
+                                {expandedWallets[wallet.id] && (
+                                    <View style={styles.permissionRow}>
+                                        {wallet.permissions.map((perm, idx) => (
+                                            <View key={`${wallet.id}-perm-${idx}`} style={styles.permissionPill}>
+                                                <Text style={styles.permissionText}>{perm}</Text>
+                                            </View>
+                                        ))}
+                                    </View>
                                 )}
-                            </Card>
-                        ))
-                    ) : (
-                        <Card style={styles.emptyCard}>
-                            <Card.Content>
-                                <Text variant="titleMedium" style={styles.emptyTitle}>
-                                    No Sub-Wallets Yet
-                                </Text>
-                                <Text variant="bodyMedium" style={styles.emptyText}>
-                                    Create your first scoped sub-wallet to get started
-                                </Text>
-                            </Card.Content>
-                        </Card>
-                    )}
-                </View>
+                            </View>
+                        </Pressable>
+                    ))
+                ) : (
+                    <View style={styles.emptyState}>
+                        <Zap size={32} color={Colors.textTertiary} />
+                        <Text style={styles.emptyTitle}>No Sub-Wallets</Text>
+                        <Text style={styles.emptyText}>Tap + to create your first scoped wallet</Text>
+                    </View>
+                )}
             </ScrollView>
 
             {/* FAB */}
-            <FAB
-                icon="plus"
-                style={[styles.fab, { marginBottom: (Platform.OS === 'android' ? 16 : 0) + insets.bottom }]}
-                onPress={handleCreateWallet}
-                color="#000000"
-            />
+            <Pressable
+                style={({ pressed }) => [
+                    styles.fab,
+                    { marginBottom: (Platform.OS === 'android' ? 16 : 0) + insets.bottom },
+                    pressed && { opacity: 0.85, transform: [{ scale: 0.95 }] },
+                ]}
+                onPress={() => setModalVisible(true)}
+            >
+                <Plus size={24} color={Colors.accentText} strokeWidth={2.5} />
+            </Pressable>
+
+            {/* ═══ Wallet Switcher Bottom Sheet ═══ */}
+            <RNModal
+                visible={switcherVisible}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setSwitcherVisible(false)}
+            >
+                <Pressable style={styles.switcherOverlay} onPress={() => setSwitcherVisible(false)}>
+                    <Pressable style={styles.switcherSheet} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.switcherHandle} />
+                        <Text style={styles.switcherTitle}>Switch Wallet</Text>
+
+                        {/* Current wallet name editing */}
+                        <View style={styles.switcherCurrentSection}>
+                            <Text style={styles.switcherLabel}>CURRENT</Text>
+                            {masterNameEditing ? (
+                                <View style={styles.switcherEditRow}>
+                                    <TextInput
+                                        value={masterNameInput}
+                                        onChangeText={setMasterNameInput}
+                                        mode="outlined"
+                                        placeholder="Enter wallet name"
+                                        style={styles.switcherNameInput}
+                                        outlineColor={Colors.surfaceBorder}
+                                        activeOutlineColor={Colors.accent}
+                                        autoFocus
+                                        dense
+                                    />
+                                    <Pressable style={styles.switcherEditBtn} onPress={handleSaveMasterName}>
+                                        <Check size={18} color={Colors.accent} />
+                                    </Pressable>
+                                </View>
+                            ) : (
+                                <Pressable
+                                    style={styles.switcherCurrentCard}
+                                    onPress={() => {
+                                        setMasterNameInput(currentWalletName || '')
+                                        setMasterNameEditing(true)
+                                    }}
+                                >
+                                    <View style={styles.switcherIconActive}>
+                                        <Wallet size={16} color={Colors.accent} />
+                                    </View>
+                                    <Text style={styles.switcherCurrentName} numberOfLines={1}>
+                                        {currentWalletName || 'Unnamed · tap to set name'}
+                                    </Text>
+                                    <Edit3 size={14} color={Colors.textSecondary} />
+                                </Pressable>
+                            )}
+                        </View>
+
+                        {/* Other saved wallets */}
+                        {savedWallets.filter(w => w.pubkey !== walletManager.getActivePubkey()).length > 0 && (
+                            <View style={styles.switcherOtherSection}>
+                                <Text style={styles.switcherLabel}>OTHER WALLETS</Text>
+                                {savedWallets
+                                    .filter(w => w.pubkey !== walletManager.getActivePubkey())
+                                    .map((wallet) => (
+                                        <Pressable
+                                            key={wallet.id}
+                                            style={({ pressed }) => [styles.switcherOtherCard, pressed && { borderColor: Colors.accent }]}
+                                            onPress={() => handleSwitchWallet(wallet)}
+                                        >
+                                            <View style={styles.switcherIcon}>
+                                                <Wallet size={16} color={Colors.textSecondary} />
+                                            </View>
+                                            <Text style={styles.switcherOtherName} numberOfLines={1}>
+                                                {wallet.name || 'Unnamed Wallet'}
+                                            </Text>
+                                            <ChevronDown size={14} color={Colors.textTertiary} style={{ transform: [{ rotate: '-90deg' }] }} />
+                                        </Pressable>
+                                    ))}
+                            </View>
+                        )}
+
+                        {/* Add new via scan */}
+                        <Pressable
+                            style={({ pressed }) => [styles.switcherScanBtn, pressed && { opacity: 0.7 }]}
+                            onPress={() => {
+                                setSwitcherVisible(false)
+                                setSwitcherScannerVisible(true)
+                            }}
+                        >
+                            <Scan size={18} color={Colors.accent} />
+                            <Text style={styles.switcherScanText}>Scan to add new wallet</Text>
+                        </Pressable>
+                    </Pressable>
+                </Pressable>
+            </RNModal>
 
             {/* Create Wallet Modal */}
             <CreateWalletModal
@@ -357,31 +527,33 @@ export default function Dashboard() {
                 onWalletCreated={handleWalletCreated}
             />
 
-            {/* Rename Wallet Dialog */}
+            {/* Rename Dialog */}
             <Portal>
                 <Dialog visible={renameDialogVisible} onDismiss={() => setRenameDialogVisible(false)} style={styles.dialog}>
-                    <Dialog.Title style={styles.dialogTitle}>Rename Sub-Wallet</Dialog.Title>
+                    <Dialog.Title style={styles.dialogTitle}>Rename</Dialog.Title>
                     <Dialog.Content>
                         <TextInput
                             label="Wallet Name"
                             value={newWalletName}
                             onChangeText={setNewWalletName}
                             mode="outlined"
-                            style={styles.renameInput}
+                            style={styles.dialogInput}
+                            outlineColor={Colors.surfaceBorder}
+                            activeOutlineColor={Colors.accent}
                             autoFocus
                         />
                     </Dialog.Content>
                     <Dialog.Actions>
-                        <Button onPress={() => setRenameDialogVisible(false)} textColor="#888">Cancel</Button>
-                        <Button onPress={handleRenameSubmit} textColor="#FFD700">Save</Button>
+                        <Button onPress={() => setRenameDialogVisible(false)} textColor={Colors.textSecondary}>Cancel</Button>
+                        <Button onPress={handleRenameSubmit} textColor={Colors.accent}>Save</Button>
                     </Dialog.Actions>
                 </Dialog>
             </Portal>
 
-            {/* Top Up Wallet Dialog */}
+            {/* Top Up Dialog */}
             <Portal>
                 <Dialog visible={topUpDialogVisible} onDismiss={() => setTopUpDialogVisible(false)} style={styles.dialog}>
-                    <Dialog.Title style={styles.dialogTitle}>Top Up Sub-Wallet</Dialog.Title>
+                    <Dialog.Title style={styles.dialogTitle}>Top Up</Dialog.Title>
                     <Dialog.Content>
                         <TextInput
                             label="Amount (sats)"
@@ -389,17 +561,45 @@ export default function Dashboard() {
                             onChangeText={setTopUpAmount}
                             mode="outlined"
                             keyboardType="numeric"
-                            style={styles.renameInput}
+                            style={styles.dialogInput}
+                            outlineColor={Colors.surfaceBorder}
+                            activeOutlineColor={Colors.accent}
                             autoFocus
                         />
                     </Dialog.Content>
                     <Dialog.Actions>
-                        <Button onPress={() => setTopUpDialogVisible(false)} textColor="#888">Cancel</Button>
-                        <Button onPress={handleTopUpSubmit} textColor="#FFD700">Top Up</Button>
+                        <Button onPress={() => setTopUpDialogVisible(false)} textColor={Colors.textSecondary}>Cancel</Button>
+                        <Button onPress={handleTopUpSubmit} textColor={Colors.accent}>Top Up</Button>
                     </Dialog.Actions>
                 </Dialog>
             </Portal>
 
+            {/* Name Before Logout Dialog */}
+            <Portal>
+                <Dialog visible={nameBeforeLogoutVisible} onDismiss={() => setNameBeforeLogoutVisible(false)} style={styles.dialog}>
+                    <Dialog.Title style={styles.dialogTitle}>Name Your Wallet</Dialog.Title>
+                    <Dialog.Content>
+                        <Text style={styles.dialogDescription}>
+                            Give this wallet a name so you can reconnect later.
+                        </Text>
+                        <TextInput
+                            label="Wallet Name"
+                            value={logoutWalletName}
+                            onChangeText={setLogoutWalletName}
+                            mode="outlined"
+                            placeholder="e.g. My Alby Wallet"
+                            style={styles.dialogInput}
+                            outlineColor={Colors.surfaceBorder}
+                            activeOutlineColor={Colors.accent}
+                            autoFocus
+                        />
+                    </Dialog.Content>
+                    <Dialog.Actions>
+                        <Button onPress={() => { setNameBeforeLogoutVisible(false); confirmDisconnect() }} textColor={Colors.textSecondary}>Skip</Button>
+                        <Button onPress={handleNameAndDisconnect} textColor={Colors.accent}>Save & Disconnect</Button>
+                    </Dialog.Actions>
+                </Dialog>
+            </Portal>
         </View>
     )
 }
@@ -407,162 +607,353 @@ export default function Dashboard() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#000000',
+        backgroundColor: Colors.bg,
     },
+
+    // Header
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        padding: 20,
-        paddingTop: 60,
-        backgroundColor: '#141414',
+        paddingHorizontal: Spacing.lg,
+        paddingBottom: Spacing.md,
+    },
+    headerLeft: {
+        flex: 1,
+        marginRight: Spacing.md,
     },
     headerTitle: {
-        color: '#FFD700',
-        fontWeight: 'bold',
-        fontSize: 24,
+        color: Colors.text,
+        fontWeight: '600',
+        fontSize: 22,
     },
     headerSubtitle: {
-        color: '#E0E0E0',
+        color: Colors.textSecondary,
+        fontSize: 12,
+        marginTop: 2,
+    },
+    tapToNameBadge: {
+        backgroundColor: Colors.accentDim,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: Radius.full,
+        alignSelf: 'flex-start',
         marginTop: 4,
     },
-    totalBalanceCard: {
-        backgroundColor: '#141414',
-        marginBottom: 24,
-        borderRadius: 16,
+    tapToNameText: {
+        color: Colors.accent,
+        fontSize: 11,
+        fontWeight: '500',
+    },
+    logoutButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: Colors.surface,
         borderWidth: 1,
-        borderColor: '#333',
-    },
-    totalBalanceContent: {
-        alignItems: 'center',
-        paddingVertical: 16,
-    },
-    totalBalanceHeader: {
-        width: '100%',
-        flexDirection: 'row',
+        borderColor: Colors.surfaceBorder,
         alignItems: 'center',
         justifyContent: 'center',
     },
-    eyeIconContainer: {
-        position: 'absolute',
-        right: 0,
+
+    scrollContent: {
+        padding: Spacing.lg,
+        paddingTop: Spacing.sm,
     },
-    totalBalanceLabel: {
-        color: '#888',
-        fontSize: 14,
+
+    // Balance
+    balanceSection: {
+        marginBottom: Spacing.xl,
+        paddingVertical: Spacing.lg,
+        alignItems: 'center',
     },
-    totalBalanceAmount: {
-        color: '#FFFFFF',
-        fontSize: 38, // Bigger balance
-        fontWeight: 'bold',
-        textAlign: 'center',
+    balanceLabelRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: Spacing.sm,
+        marginBottom: Spacing.sm,
     },
-    totalBalanceSats: {
-        color: '#FFD700',
-        fontSize: 20,
+    balanceLabel: {
+        color: Colors.textSecondary,
+        fontSize: 13,
     },
+    balanceAmount: {
+        color: Colors.text,
+        fontSize: 42,
+        fontWeight: '200',
+    },
+    balanceSats: {
+        fontSize: 18,
+        fontWeight: '400',
+        color: Colors.accent,
+    },
+
+    // Section
     sectionHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 8,
+        marginBottom: Spacing.md,
     },
-    scrollContent: {
-        padding: 20,
+    sectionLabel: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: Colors.textSecondary,
+        letterSpacing: 1.5,
     },
+
+    // Wallet card
     walletCard: {
-        backgroundColor: '#141414',
-        marginBottom: 16,
-    },
-    walletTitle: {
-        color: '#FFFFFF',
-    },
-    walletSubtitle: {
-        color: '#888888',
-    },
-    balanceHeader: {
-        width: '100%',
         flexDirection: 'row',
+        backgroundColor: Colors.surface,
+        borderRadius: Radius.lg,
+        borderWidth: 1,
+        borderColor: Colors.surfaceBorder,
+        marginBottom: Spacing.sm,
+        overflow: 'hidden',
+    },
+    walletAccent: {
+        width: 3,
+        backgroundColor: Colors.accent,
+    },
+    walletContent: {
+        flex: 1,
+        padding: Spacing.md,
+    },
+    walletTop: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    walletInfo: {
+        flex: 1,
+    },
+    walletName: {
+        color: Colors.text,
+        fontSize: 15,
+        fontWeight: '500',
+    },
+    walletType: {
+        color: Colors.textSecondary,
+        fontSize: 12,
+        marginTop: 2,
+    },
+    walletRight: {
+        alignItems: 'flex-end',
+    },
+    walletBalance: {
+        color: Colors.text,
+        fontSize: 14,
+        fontWeight: '500',
+    },
+    walletBalanceSats: {
+        color: Colors.textSecondary,
+        fontSize: 12,
+        fontWeight: '400',
+    },
+    walletActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: Spacing.md,
+        marginTop: Spacing.xs,
+    },
+
+    // Permissions
+    permissionRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 6,
+        marginTop: Spacing.sm,
+        paddingTop: Spacing.sm,
+        borderTopWidth: 1,
+        borderTopColor: Colors.surfaceBorder,
+    },
+    permissionPill: {
+        backgroundColor: Colors.accentDim,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: Radius.full,
+    },
+    permissionText: {
+        color: Colors.accent,
+        fontSize: 11,
+        fontWeight: '500',
+    },
+
+    // Empty state
+    emptyState: {
+        alignItems: 'center',
+        paddingVertical: Spacing.xxl,
+    },
+    emptyTitle: {
+        color: Colors.textSecondary,
+        fontSize: 16,
+        fontWeight: '500',
+        marginTop: Spacing.md,
+    },
+    emptyText: {
+        color: Colors.textTertiary,
+        fontSize: 13,
+        marginTop: Spacing.xs,
+    },
+
+    // FAB
+    fab: {
+        position: 'absolute',
+        right: Spacing.lg,
+        bottom: Spacing.lg,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: Colors.accent,
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: Colors.accent,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+        elevation: 8,
+    },
+
+    // ═══ Wallet Switcher ═══
+    switcherOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        justifyContent: 'flex-end',
+    },
+    switcherSheet: {
+        backgroundColor: Colors.surfaceElevated,
+        borderTopLeftRadius: Radius.lg,
+        borderTopRightRadius: Radius.lg,
+        padding: Spacing.lg,
+        paddingBottom: Spacing.xxl,
+        borderTopWidth: 1,
+        borderColor: Colors.surfaceBorder,
+    },
+    switcherHandle: {
+        width: 36,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: Colors.textTertiary,
+        alignSelf: 'center',
+        marginBottom: Spacing.lg,
+    },
+    switcherTitle: {
+        color: Colors.text,
+        fontSize: 18,
+        fontWeight: '600',
+        marginBottom: Spacing.lg,
+    },
+    switcherLabel: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: Colors.textSecondary,
+        letterSpacing: 1.5,
+        marginBottom: Spacing.sm,
+    },
+    switcherCurrentSection: {
+        marginBottom: Spacing.lg,
+    },
+    switcherCurrentCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: Colors.accentDim,
+        borderRadius: Radius.md,
+        borderWidth: 1,
+        borderColor: Colors.accent,
+        padding: Spacing.md,
+    },
+    switcherIconActive: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: Colors.accent,
         alignItems: 'center',
         justifyContent: 'center',
     },
-    balanceLabel: {
-        color: '#888',
-        fontSize: 14,
+    switcherCurrentName: {
+        flex: 1,
+        color: Colors.text,
+        fontSize: 15,
+        fontWeight: '500',
+        marginLeft: Spacing.sm,
     },
-    walletRight: {
+    switcherEditRow: {
         flexDirection: 'row',
         alignItems: 'center',
+        gap: Spacing.sm,
     },
-    walletBalanceText: {
-        color: '#FFD700',
-        fontWeight: 'bold',
-        fontSize: 14,
+    switcherNameInput: {
+        flex: 1,
+        backgroundColor: Colors.surfaceElevated,
     },
-    permissionContainer: {
+    switcherEditBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: Colors.accentDim,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    switcherOtherSection: {
+        marginBottom: Spacing.lg,
+    },
+    switcherOtherCard: {
         flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 8,
-        marginTop: 8,
+        alignItems: 'center',
+        backgroundColor: Colors.surface,
+        borderRadius: Radius.md,
+        borderWidth: 1,
+        borderColor: Colors.surfaceBorder,
+        padding: Spacing.md,
+        marginBottom: Spacing.sm,
     },
-    permissionChip: {
-        backgroundColor: '#333333',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
+    switcherIcon: {
+        width: 32,
+        height: 32,
         borderRadius: 16,
+        backgroundColor: Colors.surfaceBorder,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
-    permissionText: {
-        color: '#FFD700',
-        fontSize: 12,
+    switcherOtherName: {
+        flex: 1,
+        color: Colors.text,
+        fontSize: 14,
+        marginLeft: Spacing.sm,
     },
-    budgetText: {
-        color: '#888',
-        fontSize: 12,
-    },
-    spentText: {
-        color: '#F44336',
-        fontSize: 12,
-        fontWeight: 'bold',
-    },
-    budgetRow: {
+    switcherScanBtn: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginTop: 8,
-        paddingTop: 8,
-        borderTopWidth: 1,
-        borderTopColor: '#222',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: Spacing.sm,
+        paddingVertical: 14,
+        borderRadius: Radius.md,
+        borderWidth: 1,
+        borderColor: Colors.surfaceBorder,
+        borderStyle: 'dashed',
     },
-    emptyCard: {
-        backgroundColor: '#141414',
-        padding: 20,
+    switcherScanText: {
+        color: Colors.accent,
+        fontSize: 14,
+        fontWeight: '500',
     },
-    emptyTitle: {
-        color: '#FFFFFF',
-        textAlign: 'center',
-        marginBottom: 8,
-    },
-    emptyText: {
-        color: '#888888',
-        textAlign: 'center',
-    },
-    sectionTitle: {
-        color: '#888888',
-        marginBottom: 12,
-    },
-    fab: {
-        position: 'absolute',
-        margin: 16,
-        right: 0,
-        bottom: 0,
-        backgroundColor: '#FFD700',
-    },
+
+    // Dialogs
     dialog: {
-        backgroundColor: '#141414',
+        backgroundColor: Colors.surfaceElevated,
+        borderRadius: Radius.lg,
     },
     dialogTitle: {
-        color: '#FFD700',
+        color: Colors.text,
+        fontWeight: '600',
     },
-    renameInput: {
-        backgroundColor: '#141414',
+    dialogInput: {
+        backgroundColor: Colors.surfaceElevated,
+    },
+    dialogDescription: {
+        color: Colors.textSecondary,
+        fontSize: 14,
+        marginBottom: Spacing.md,
     },
 })
