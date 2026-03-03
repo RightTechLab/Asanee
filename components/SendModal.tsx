@@ -4,9 +4,11 @@ import { Text, TextInput, ActivityIndicator } from 'react-native-paper'
 import { walletManager } from '../services/WalletManager'
 import { useWalletStore } from '../store/walletStore'
 import { useBtcPrice } from '../hooks/useBtcPrice'
-import { satsToThb, formatThb } from '../services/PriceService'
+import { satsToThb, thbToSats, formatThb } from '../services/PriceService'
+import { isLNURL } from '../services/LNURLService'
+import type { LNURLPayResponse } from '../services/LNURLService'
 import QRScanner from './QRScanner'
-import { Scan, X, ArrowUpRight, Zap, CheckCircle } from 'lucide-react-native'
+import { Scan, X, ArrowUpRight, Zap, CheckCircle, ArrowRightLeft } from 'lucide-react-native'
 import { Colors, Spacing, Radius } from '../theme'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -26,8 +28,11 @@ export default function SendModal({ visible, onDismiss, initialInvoice = '', onP
     const [resolving, setResolving] = useState(false)
     const [error, setError] = useState('')
     const [isLNAddress, setIsLNAddress] = useState(false)
+    const [isLnurl, setIsLnurl] = useState(false)
+    const [lnurlMeta, setLnurlMeta] = useState<LNURLPayResponse | null>(null)
     const [scannerVisible, setScannerVisible] = useState(false)
     const [success, setSuccess] = useState(false)
+    const [inputUnit, setInputUnit] = useState<'sats' | 'thb'>('sats')
     const insets = useSafeAreaInsets()
     const btcPrice = useBtcPrice()
 
@@ -44,9 +49,30 @@ export default function SendModal({ visible, onDismiss, initialInvoice = '', onP
     }, [visible])
 
     useEffect(() => {
-        const lower = invoice.toLowerCase().trim()
-        setIsLNAddress(lower.includes('@') && !lower.startsWith('lnbc') && !lower.startsWith('lightning:'))
+        const trimmed = invoice.trim()
+        const lower = trimmed.toLowerCase()
+
+        if (isLNURL(trimmed)) {
+            setIsLnurl(true)
+            setIsLNAddress(false)
+            // Auto-resolve LNURL metadata for min/max hints
+            setLnurlMeta(null)
+            walletManager.resolveLNURL(trimmed)
+                .then(meta => { console.log('[asanee-lnurl] Auto-resolved meta:', meta?.tag); setLnurlMeta(meta) })
+                .catch((err) => { console.error('[asanee-lnurl] Auto-resolve failed:', err); setLnurlMeta(null) })
+        } else {
+            setIsLnurl(false)
+            setLnurlMeta(null)
+            setIsLNAddress(lower.includes('@') && !lower.startsWith('lnbc') && !lower.startsWith('lightning:'))
+        }
     }, [invoice])
+
+    const needsAmount = isLNAddress || isLnurl
+
+    // Compute sats from input (handles THB conversion)
+    const computedSats = inputUnit === 'thb' && btcPrice && amountSats
+        ? thbToSats(Number.parseFloat(amountSats), btcPrice).toString()
+        : amountSats
 
     const handlePay = async () => {
         if (!invoice.trim()) return
@@ -55,14 +81,27 @@ export default function SendModal({ visible, onDismiss, initialInvoice = '', onP
             let finalInvoice = invoice.trim()
             let finalAmountMsat: number | undefined
 
-            if (balance !== null && isLNAddress && amountSats) {
-                const reqSats = Number.parseInt(amountSats)
+            if (balance !== null && needsAmount && computedSats) {
+                const reqSats = Number.parseInt(computedSats)
                 if (reqSats * 1000 > balance) throw new Error(`Insufficient funds. Only ${(balance / 1000).toLocaleString()} sats available.`)
             }
 
-            if (isLNAddress) {
-                if (!amountSats) throw new Error('Please enter an amount')
-                const amountMsat = Number.parseInt(amountSats) * 1000
+            if (isLnurl) {
+                // LNURL-pay flow
+                if (!computedSats || Number.parseInt(computedSats) <= 0) throw new Error('Please enter an amount')
+                const amountMsat = Number.parseInt(computedSats) * 1000
+                setResolving(true)
+                const meta = lnurlMeta || await walletManager.resolveLNURL(finalInvoice)
+                if (amountMsat < meta.minSendable || amountMsat > meta.maxSendable) {
+                    throw new Error(`Amount must be between ${Math.ceil(meta.minSendable / 1000)} and ${Math.floor(meta.maxSendable / 1000)} sats`)
+                }
+                finalInvoice = await walletManager.getInvoiceFromLNURL(meta.callback, amountMsat)
+                finalAmountMsat = amountMsat
+                setResolving(false)
+            } else if (isLNAddress) {
+                // Lightning Address flow
+                if (!computedSats || Number.parseInt(computedSats) <= 0) throw new Error('Please enter an amount')
+                const amountMsat = Number.parseInt(computedSats) * 1000
                 setResolving(true)
                 const metadata = await walletManager.resolveLightningAddress(finalInvoice)
                 finalInvoice = await walletManager.getInvoiceFromLNURL(metadata.callback, amountMsat)
@@ -81,8 +120,13 @@ export default function SendModal({ visible, onDismiss, initialInvoice = '', onP
         }
     }
 
-    const handleScan = (data: string) => { setInvoice(data); setScannerVisible(false) }
-    const reset = () => { setInvoice(''); setAmountSats(''); setError(''); setSuccess(false); onDismiss() }
+    const handleScan = (data: string) => {
+        // Strip lightning: URI prefix if present (common in QR codes)
+        const cleaned = data.trim().toLowerCase().startsWith('lightning:') ? data.trim().slice('lightning:'.length) : data.trim()
+        setInvoice(cleaned)
+        setScannerVisible(false)
+    }
+    const reset = () => { setInvoice(''); setAmountSats(''); setError(''); setSuccess(false); setIsLnurl(false); setLnurlMeta(null); setInputUnit('sats'); onDismiss() }
 
     if (scannerVisible) return <QRScanner onScan={handleScan} onClose={() => setScannerVisible(false)} />
 
@@ -146,7 +190,7 @@ export default function SendModal({ visible, onDismiss, initialInvoice = '', onP
                                             multiline={!isLNAddress}
                                             numberOfLines={isLNAddress ? 1 : 2}
                                             style={[styles.input, { flex: 1 }]}
-                                            placeholder="lnbc... or user@domain.com"
+                                            placeholder="lnbc... / user@domain.com / lnurl1..."
                                             outlineColor={Colors.surfaceBorder}
                                             activeOutlineColor={Colors.accent}
                                             error={!!error}
@@ -162,10 +206,24 @@ export default function SendModal({ visible, onDismiss, initialInvoice = '', onP
                                         </Pressable>
                                     </View>
 
-                                    {/* Amount (for LN address) */}
-                                    {isLNAddress && (
+                                    {/* Amount (for LN address or LNURL) */}
+                                    {needsAmount && (
                                         <>
-                                            <Text style={styles.fieldLabel}>AMOUNT</Text>
+                                            <View style={styles.fieldLabelRow}>
+                                                <Text style={styles.fieldLabel}>AMOUNT</Text>
+                                                <Pressable
+                                                    style={({ pressed }) => [styles.unitToggle, pressed && { opacity: 0.7 }]}
+                                                    onPress={() => {
+                                                        setAmountSats('')
+                                                        setInputUnit(prev => prev === 'sats' ? 'thb' : 'sats')
+                                                    }}
+                                                >
+                                                    <ArrowRightLeft size={12} color={Colors.accent} />
+                                                    <Text style={styles.unitToggleText}>
+                                                        {inputUnit === 'sats' ? '฿ THB' : '⚡ sats'}
+                                                    </Text>
+                                                </Pressable>
+                                            </View>
                                             <TextInput
                                                 value={amountSats}
                                                 onChangeText={setAmountSats}
@@ -176,13 +234,21 @@ export default function SendModal({ visible, onDismiss, initialInvoice = '', onP
                                                 activeOutlineColor={Colors.accent}
                                                 placeholder="0"
                                                 dense
-                                                right={<TextInput.Affix text="sats" textStyle={{ color: Colors.textSecondary }} />}
+                                                right={<TextInput.Affix text={inputUnit === 'sats' ? 'sats' : '฿'} textStyle={{ color: Colors.textSecondary }} />}
                                             />
-                                            {amountSats && btcPrice && (
-                                                <Text style={styles.fiatAmount}>
-                                                    ≈ {formatThb(satsToThb(Number.parseInt(amountSats), btcPrice))}
+                                            {/* Min/Max range hint for LNURL */}
+                                            {isLnurl && lnurlMeta && (
+                                                <Text style={styles.lnurlRange}>
+                                                    {Math.ceil(lnurlMeta.minSendable / 1000).toLocaleString()} – {Math.floor(lnurlMeta.maxSendable / 1000).toLocaleString()} sats
                                                 </Text>
                                             )}
+                                            {amountSats && btcPrice ? (
+                                                <Text style={styles.fiatAmount}>
+                                                    ≈ {inputUnit === 'sats'
+                                                        ? formatThb(satsToThb(Number.parseInt(amountSats), btcPrice))
+                                                        : `${thbToSats(Number.parseFloat(amountSats), btcPrice).toLocaleString()} sats`}
+                                                </Text>
+                                            ) : null}
                                         </>
                                     )}
 
@@ -216,7 +282,7 @@ export default function SendModal({ visible, onDismiss, initialInvoice = '', onP
                                             <>
                                                 <ArrowUpRight size={18} color={Colors.accentText} />
                                                 <Text style={styles.payText}>
-                                                    {isLNAddress ? 'Pay Address' : 'Pay Invoice'}
+                                                    {isLnurl ? 'Pay LNURL' : isLNAddress ? 'Pay Address' : 'Pay Invoice'}
                                                 </Text>
                                             </>
                                         )}
@@ -318,6 +384,26 @@ const styles = StyleSheet.create({
         letterSpacing: 1.5,
         marginBottom: Spacing.xs,
     },
+    fieldLabelRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: Spacing.xs,
+    },
+    unitToggle: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        backgroundColor: Colors.accentDim,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: Radius.full,
+    },
+    unitToggleText: {
+        color: Colors.accent,
+        fontSize: 11,
+        fontWeight: '600',
+    },
     inputRow: {
         flexDirection: 'row',
         alignItems: 'flex-start',
@@ -342,6 +428,13 @@ const styles = StyleSheet.create({
         color: Colors.textSecondary,
         fontSize: 14,
         marginTop: Spacing.xs,
+        marginLeft: Spacing.xs,
+    },
+    lnurlRange: {
+        color: Colors.textSecondary,
+        fontSize: 12,
+        marginTop: -Spacing.sm,
+        marginBottom: Spacing.xs,
         marginLeft: Spacing.xs,
     },
 

@@ -5,6 +5,7 @@ import { bytesToHex, hexToBytes } from "nostr-tools/utils"
 import { sha256 } from '@noble/hashes/sha2.js'
 import { SubWallet, WalletConfig, SavedWallet } from '../types'
 import { StorageService } from './StorageService'
+import { resolveLNURL as resolveLNURLService, LNURLPayResponse } from './LNURLService'
 
 const MAX_SAVED_WALLETS = 3
 const SAVED_WALLETS_KEY = 'saved_wallets'
@@ -708,6 +709,13 @@ export class WalletManager {
         } catch (error) {
             throw error
         }
+    }
+
+    /**
+     * Resolve a bech32-encoded LNURL to LNURL-pay metadata
+     */
+    async resolveLNURL(lnurl: string): Promise<LNURLPayResponse> {
+        return resolveLNURLService(lnurl)
     }
 
     /**

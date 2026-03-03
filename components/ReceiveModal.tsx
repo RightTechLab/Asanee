@@ -2,10 +2,10 @@ import React, { useState } from 'react'
 import { View, StyleSheet, Share, Pressable, Platform, Modal, ScrollView, KeyboardAvoidingView } from 'react-native'
 import { Text, TextInput, ActivityIndicator } from 'react-native-paper'
 import QRCode from 'react-native-qrcode-svg'
-import { Copy, Share2, ArrowDownLeft, CheckCircle, RotateCcw, X } from 'lucide-react-native'
+import { Copy, Share2, ArrowDownLeft, CheckCircle, RotateCcw, X, ArrowRightLeft } from 'lucide-react-native'
 import { walletManager } from '../services/WalletManager'
 import { useBtcPrice } from '../hooks/useBtcPrice'
-import { satsToThb, formatThb } from '../services/PriceService'
+import { satsToThb, thbToSats, formatThb } from '../services/PriceService'
 import * as Clipboard from 'expo-clipboard'
 import { Colors, Spacing, Radius } from '../theme'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -25,12 +25,16 @@ export default function ReceiveModal({ visible, onDismiss, walletName, walletId 
     const [copied, setCopied] = useState(false)
     const btcPrice = useBtcPrice()
     const insets = useSafeAreaInsets()
+    const [inputUnit, setInputUnit] = useState<'sats' | 'thb'>('sats')
 
     const handleGenerate = async () => {
-        if (!amount) return
+        const satsAmount = inputUnit === 'thb' && btcPrice
+            ? thbToSats(Number.parseFloat(amount), btcPrice)
+            : Number.parseInt(amount)
+        if (!satsAmount || satsAmount <= 0) return
         setLoading(true)
         try {
-            const amountMsat = Number.parseInt(amount) * 1000
+            const amountMsat = satsAmount * 1000
             const response = await walletManager.makeInvoice(amountMsat, description || `Funding ${walletName}`, walletId)
             setInvoice(response.invoice)
         } catch (error) {
@@ -53,7 +57,7 @@ export default function ReceiveModal({ visible, onDismiss, walletName, walletId 
     }
 
     const reset = () => {
-        setAmount(''); setDescription(''); setInvoice(null); setCopied(false); onDismiss()
+        setAmount(''); setDescription(''); setInvoice(null); setCopied(false); setInputUnit('sats'); onDismiss()
     }
 
     return (
@@ -90,26 +94,39 @@ export default function ReceiveModal({ visible, onDismiss, walletName, walletId 
                                         <Text style={styles.amountValue}>
                                             {amount || '0'}
                                         </Text>
-                                        <Text style={styles.amountUnit}>sats</Text>
+                                        <Text style={styles.amountUnit}>{inputUnit === 'sats' ? 'sats' : '฿ THB'}</Text>
                                     </View>
-                                    {amount && btcPrice && (
+                                    {amount && btcPrice ? (
                                         <Text style={styles.fiatAmount}>
-                                            ≈ {formatThb(satsToThb(Number.parseInt(amount), btcPrice))}
+                                            ≈ {inputUnit === 'sats'
+                                                ? formatThb(satsToThb(Number.parseInt(amount), btcPrice))
+                                                : `${thbToSats(Number.parseFloat(amount), btcPrice).toLocaleString()} sats`}
                                         </Text>
-                                    )}
+                                    ) : null}
 
-                                    <TextInput
-                                        value={amount}
-                                        onChangeText={setAmount}
-                                        keyboardType="numeric"
-                                        mode="outlined"
-                                        style={styles.input}
-                                        outlineColor={Colors.surfaceBorder}
-                                        activeOutlineColor={Colors.accent}
-                                        placeholder="Enter amount"
-                                        dense
-                                        right={<TextInput.Affix text="sats" textStyle={{ color: Colors.textSecondary }} />}
-                                    />
+                                    <View style={styles.amountInputRow}>
+                                        <TextInput
+                                            value={amount}
+                                            onChangeText={setAmount}
+                                            keyboardType="numeric"
+                                            mode="outlined"
+                                            style={[styles.input, { flex: 1 }]}
+                                            outlineColor={Colors.surfaceBorder}
+                                            activeOutlineColor={Colors.accent}
+                                            placeholder="Enter amount"
+                                            dense
+                                            right={<TextInput.Affix text={inputUnit === 'sats' ? 'sats' : '฿'} textStyle={{ color: Colors.textSecondary }} />}
+                                        />
+                                        <Pressable
+                                            style={({ pressed }) => [styles.unitToggleBtn, pressed && { opacity: 0.7 }]}
+                                            onPress={() => {
+                                                setAmount('')
+                                                setInputUnit(prev => prev === 'sats' ? 'thb' : 'sats')
+                                            }}
+                                        >
+                                            <ArrowRightLeft size={16} color={Colors.accent} />
+                                        </Pressable>
+                                    </View>
 
                                     <TextInput
                                         value={description}
@@ -295,6 +312,22 @@ const styles = StyleSheet.create({
     input: {
         marginBottom: Spacing.md,
         backgroundColor: Colors.surfaceElevated,
+    },
+    amountInputRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: Spacing.sm,
+        marginBottom: Spacing.md,
+    },
+    unitToggleBtn: {
+        width: 48,
+        height: 48,
+        borderRadius: Radius.md,
+        borderWidth: 1,
+        borderColor: Colors.surfaceBorder,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 2,
     },
     generateBtn: {
         backgroundColor: Colors.accent,

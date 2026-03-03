@@ -51,6 +51,15 @@ export function satsToThb(sats: number, btcThbPrice: number): number {
 }
 
 /**
+ * Convert THB to sats
+ */
+export function thbToSats(thb: number, btcThbPrice: number): number {
+    if (btcThbPrice <= 0) return 0
+    const btc = thb / btcThbPrice
+    return Math.round(btc * 100_000_000)
+}
+
+/**
  * Format THB amount for display
  */
 export function formatThb(amount: number): string {
